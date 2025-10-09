@@ -1,0 +1,9 @@
+*.o
+*.hi
+
+NewIfLexer.hs 
+NewIfParser.hs 
+TheoLexer.hs 
+TheoParser.hs 
+Lexer.hs 
+AnBParser.hs
