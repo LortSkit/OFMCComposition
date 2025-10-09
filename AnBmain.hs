@@ -13,30 +13,32 @@ All Rights Reserved.
 
 -}
 
-module AnBmain(newanbmain) 
-where
+module AnBmain (newanbmain) where
+
+import AnBOnP
 import AnBParser
 import Ast
-import Msg
-import Lexer
-import Translator
 import FPTranslator
-import AnBOnP
+import Lexer
+import Msg
+import Translator
 
 mkIF :: Protocol -> AnBOptsAndPars -> String
-mkIF (protocol@(_,typdec,knowledge,_,_,_)) args = 
-            ((if (outt args)==IF 
-              then (\ x -> x++endstr(noowngoal args)) . ruleList (if2cif args)
-              else if ((outt args)==FP) || ((outt args)==FPI) || ((outt args)==Isa)
-              then ruleListFP [] True
-              else error ("Unknown output format: "++(show (outt args))))  . 
-             addInit .
-             addGoals . 
-             rulesAddSteps . 
-             createRules .
-             formats ) (mkPTS protocol args)
+mkIF (protocol@(_, typdec, knowledge, _, _, _)) args =
+  ( ( if (outt args) == IF
+        then (\x -> x ++ endstr (noowngoal args)) . ruleList (if2cif args)
+        else
+          if ((outt args) == FP) || ((outt args) == FPI) || ((outt args) == Isa)
+            then ruleListFP [] True
+            else error ("Unknown output format: " ++ (show (outt args)))
+    )
+      . addInit
+      . addGoals
+      . rulesAddSteps
+      . createRules
+      . formats
+  )
+    (mkPTS protocol args)
 
-newanbmain inputstr otp = 
+newanbmain inputstr otp =
   (mkIF (anbparser (alexScanTokens inputstr)) otp)
-  
-  

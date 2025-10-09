@@ -15,20 +15,20 @@ All Rights Reserved.
 
 module Constants where
 
--- | The value of nodes in memory where we stop to search 
+-- | The value of nodes in memory where we stop to search
 --   breadth-first and start depth-first.
 --   FIX: should be adjusted ;-)
 nodemax :: Int
-nodemax = 5000 --- 1000000 
+nodemax = 5000 --- 1000000
 
 -- | The depth where we stop if the tree has infinite size.
 depthbound :: Int
 depthbound = 1000000
 
--- | There are several cases where OFMC must quit with an error, without grace. 
+-- | There are several cases where OFMC must quit with an error, without grace.
 --   Do only set to true for experiments!
 grace :: Bool
-grace = False 
+grace = False
 
 -- | Give out transitions with labels?
 generateLabels = False

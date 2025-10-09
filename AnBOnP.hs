@@ -14,40 +14,63 @@ All Rights Reserved.
 -}
 
 -- | This module defines some types for the parameters and options that the AnB translators use
-module AnBOnP
-where
+module AnBOnP where
 
 -- | The output type of the AnB translators
-data OutputType = Internal -- ^ Do we use this?
-                | Pretty  -- ^ Do we use this?
-                | AST  -- ^ Just give the abstract syntax tree (for debugging)
-                | IF -- ^ standard translation to AVISPA Intermediate Format
-                | FP  -- ^ output for fixedpoint computation
-                | FPI -- ^ iterative version of FP (for debugging)
-     		| Isa -- ^ output for Isabelle
-                | HLPSL -- ^ not implemented
-                | Amphibian -- ^ do we use this?
-                | AVANTSSAR -- ^ AVANTSSAR output format
-                deriving (Eq,Show)
+data OutputType
+  = -- | Do we use this?
+    Internal
+  | -- | Do we use this?
+    Pretty
+  | -- | Just give the abstract syntax tree (for debugging)
+    AST
+  | -- | standard translation to AVISPA Intermediate Format
+    IF
+  | -- | output for fixedpoint computation
+    FP
+  | -- | iterative version of FP (for debugging)
+    FPI
+  | -- | output for Isabelle
+    Isa
+  | -- | not implemented
+    HLPSL
+  | -- | do we use this?
+    Amphibian
+  | -- | AVANTSSAR output format
+    AVANTSSAR
+  deriving (Eq, Show)
 
 -- | The version of authentication considered in fixedpoint computation
-data Authlevel = Strong -- ^ injective agreement: actually not supported for FP
-               | Weak  -- ^ standard non-injective agreement
-               | HWeak  -- ^ default; like Weak, but ignore if there are confusions between honest agents
-     	       	 deriving (Eq,Show)
+data Authlevel
+  = -- | injective agreement: actually not supported for FP
+    Strong
+  | -- | standard non-injective agreement
+    Weak
+  | -- | default; like Weak, but ignore if there are confusions between honest agents
+    HWeak
+  deriving (Eq, Show)
 
 -- | The set of options and parameters that are passed to the AnB translators
-data AnBOptsAndPars = 
-                AnBOnP { anbfilename  :: String, -- ^ AnB file to translate 
-		     theory    :: Maybe String, -- ^ Algebraic theory file (not supported now)
-			 anboutput :: Maybe String, -- ^ Output filename
-			 numSess   :: Maybe Int, -- ^ Number of sessions (for translation to IF)
-			 outt      :: OutputType, -- ^ Output type
-			 typed     :: Bool, -- ^ flag for typed protocol model
-			 iterateFP :: Int, -- ^ used?
-			 authlevel :: Authlevel, -- ^ authentication model level (for FP/Isa)
-             noowngoal :: Bool, -- ^ whether authentication on oneself is checked
-             if2cif    :: Bool -- ^ rewriting step from IF/Annotated AnB to cryptIF          
-                       }
-
-
+data AnBOptsAndPars
+  = AnBOnP
+  { -- | AnB file to translate
+    anbfilename :: String,
+    -- | Algebraic theory file (not supported now)
+    theory :: Maybe String,
+    -- | Output filename
+    anboutput :: Maybe String,
+    -- | Number of sessions (for translation to IF)
+    numSess :: Maybe Int,
+    -- | Output type
+    outt :: OutputType,
+    -- | flag for typed protocol model
+    typed :: Bool,
+    -- | used?
+    iterateFP :: Int,
+    -- | authentication model level (for FP/Isa)
+    authlevel :: Authlevel,
+    -- | whether authentication on oneself is checked
+    noowngoal :: Bool,
+    -- | rewriting step from IF/Annotated AnB to cryptIF
+    if2cif :: Bool
+  }
