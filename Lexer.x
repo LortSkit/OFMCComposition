@@ -50,6 +50,7 @@ tokens :-
   "->"		{ (\ p s -> TINSECCH p)}
   "*->>"        { (\ p s -> TFAUTHCH p) }
   "*->>*"       { (\ p s -> TFSECCH p) }
+  "-Ch->"       { (\ p s -> TCHPROT p) }
   "%"		{ (\ p s -> TPERCENT p)}
   "!="          { (\ p s -> TUNEQUAL p)}
   "!"           { (\ p s -> TEXCLAM  p)}
@@ -104,6 +105,7 @@ data Token=
    | TABSTRACTION AlexPosn
    | TGOALS AlexPosn
    | TFSECCH AlexPosn
+   | TCHPROT AlexPosn
    | TFAUTHCH AlexPosn
    | TAUTHENTICATES AlexPosn
    | TON AlexPosn
@@ -141,6 +143,7 @@ token_posn (TACTIONS p)=p
 token_posn (TABSTRACTION p)=p
 token_posn (TGOALS p)=p
 token_posn (TFSECCH p)=p
+token_posn (TCHPROT p)=p
 token_posn (TFAUTHCH p)=p
 token_posn (TAUTHENTICATES p)=p
 token_posn (TWEAKLY p)=p
