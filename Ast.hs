@@ -37,6 +37,8 @@ data Type
   | SymmetricKey
   | -- | for free user-defined function symbols (no input/output type specification)
     Function
+    -- | for Ch and App Payloads
+  | Payload
   | -- | special type for the purpose-argument of witness and request facts
     Purpose
   | -- | Formats - public transparent functions -> encoded as pairs
