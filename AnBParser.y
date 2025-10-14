@@ -90,16 +90,19 @@ typedec :: {Types}
 
 type :: {Type}
   : ident {case $1 of
-	       "Agent" -> Agent False False
-	       "Number" -> Number
-               "SeqNumber" -> SeqNumber
-	       "PublicKey" -> PublicKey
-	       "Symmetric_key" -> SymmetricKey 
-	       "Function" -> Function
-	       "Format" -> Format
-	       "Untyped" -> Untyped
-	       _ -> Custom $1
-	}
+         "Agent" -> Agent False False
+         "Number" -> Number
+         "SeqNumber" -> SeqNumber
+         "PublicKey" -> PublicKey         
+         "Public_Key" -> PublicKey
+         "Public_key" -> PublicKey           -- in all spellings, it is a registered trademark!
+         "Symmetric_key" -> SymmetricKey 
+         "Function" -> Function
+         "Payload" -> Payload
+         "Format" -> Format
+         "Untyped" -> Untyped
+         _ -> Custom $1
+  }
 
 identlist :: {[Ident]}
   : ident {[$1]}
