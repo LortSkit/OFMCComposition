@@ -25,6 +25,7 @@ import LMsg
 import Msg
 import MsgPat
 import Translator
+import PaoloTranslator
 import ProtocolTranslationTypes
 
 debughead :: String -> [a] -> a

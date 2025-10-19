@@ -24,6 +24,7 @@ import Msg
 import NewIfLexer
 import NewIfParser
 import Translator
+import PaoloTranslator
 import ProtocolTranslationTypes
 
 if2horn :: PProt -> HornRep

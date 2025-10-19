@@ -20,7 +20,9 @@ import AnBOnP
 import Ast
 import Control.Monad
 import Data.List
+import Data.Maybe
 import Msg
+import PaoloTranslator
 import ProtocolTranslationTypes
 
 vertformats :: ProtocolTranslationState -> ProtocolTranslationState
@@ -117,3 +119,183 @@ fMsg formats (Comp Apply [Atom f, arg])
   | otherwise = Comp Apply $ Atom f : [fMsg formats arg]
 fMsg formats (Comp f args) = Comp f $ map (fMsg formats) args
 fMsg formats (Atom a) = Atom a
+
+
+
+--- Stage 4: Adding the initial state
+-------------------------------------
+
+vertaddInit :: ProtocolTranslationState -> ProtocolTranslationState
+vertaddInit pts =
+  let (_, typdec, knowledge, _, _, _) = protocol pts
+      args = options pts
+      absInit = getinitials (rules pts) knowledge
+      jn = numSess args
+      n :: Int
+      n =
+        if (jn == Nothing)
+          then error "Unbounded sessions currently not supported."
+          else fromJust jn
+      (_, ineq) = knowledge
+      (facts0, honest, aglili, agents0, ik0, ineq') = instantiate n absInit ineq
+      facts =
+        facts0
+          ++ ik0
+          ++ (getCrypto agents0)
+      agents = ((++) ["i", "A", "B"]) agents0
+   in pts
+        { initial =
+            ( if typed args
+                then
+                  ( "section types:\n"
+                      ++ (ppIdList agents)
+                      ++ (printTypes typdec)
+                      ++ (printTypes [(Function, ["sent","secCh"])]) -- only have this if App protocol!!! -- Should i make them protected keywords like "secret" is?
+                      -- ++ (printTypes [(Set, ["opened","closed"])]) -- only have this if Ch protocol
+                      ++ "\n"
+                  )
+                else ""
+            )
+              ++ "section inits:\n"
+              ++ " initial_state init1 :=\n"
+              ++ (ppFactList IF facts)
+              ++ (concatMap (\x -> " & " ++ (ppId x) ++ "/=i") honest)
+              ++
+              ---    (concatMap (\ (x,y) -> " & "++(ppId x)++"/="++(ppId y)) [(x,y) | x<-agents0, y<-agents0, x/=y])++
+              ---    (error $ (show aglili) ++ (show (concatMap (\ (x,y) -> " & "++(ppId x)++"/="++(ppId y)) [(x,y) | l<-aglili, x<-l, y<-l, x/=y])))++
+              (concatMap (\(s, t) -> " & " ++ (ppMsg IF s) ++ "/=" ++ (ppMsg IF t)) ineq')
+              ++ "\n\n"
+              ++ "section rules:\n"
+        }
+
+getCrypto :: [Ident] -> [Fact]
+getCrypto agents =
+  map
+    Iknows
+    ( (Atom "confChCr")
+        : (Atom "authChCr")
+        : (Comp Inv [Comp Apply [Atom "authChCr", Atom "i"]])
+        : (Comp Inv [Comp Apply [Atom "confChCr", Atom "i"]])
+        : []
+    )
+
+printTypes :: Types -> String
+printTypes =
+  let f (Agent _ _, ids) = (ppIdList ids) ++ ":agent\n"
+      f (Number, ids) = (ppIdList ids) ++ ":text\n"
+      f (SeqNumber, _) = ""
+      f (PublicKey, ids) = (ppIdList ids) ++ ":public_key\n"
+      f (SymmetricKey, ids) = (ppIdList ids) ++ ":symmetric_key\n"
+      f (Function, ids) = (ppIdList ids) ++ ":function\n"
+      f (Payload, ids) = (ppIdList ids) ++ ":payload\n"
+      f (Custom x, ids) = (ppIdList ids) ++ ":t_" ++ x ++ "\n"
+      f (Untyped, _) = ""
+      f (Format, ids) = (ppIdList ids) ++ ":text" ++ "\n"
+   in concatMap f
+
+getIK0 :: [Fact] -> [Fact]
+getIK0 states =
+  let f (Atom a) =
+        if (isVariable a) && (a /= "SID")
+          then Atom "i"
+          else Atom a
+      f (Comp o as) = Comp o (map f as)
+   in ( (map (Iknows . f))
+          . nub
+          . (concatMap getMsgs)
+          . (filter (\(State role msgs) -> isVariable role))
+      )
+        states
+
+getMsgs :: Fact -> [Msg]
+getMsgs (State role msgs) = map snd msgs
+getMsgs (FPState role msgs) = msgs
+getMsgs (Iknows msg) = [msg]
+getMsgs (Fact _ msgs) = msgs
+
+getinitials :: [Rule] -> Knowledge -> [Fact]
+getinitials rules =
+  (map (\(x, y) -> State x (map (\z -> (z, z)) ((Atom x) : (Atom "0") : (((analysis y) \\ [Atom x]) ++ [Atom "SID"]))))) . fst
+
+instantiate :: Int -> [Fact] -> [(Msg, Msg)] -> ([Fact], [Ident], [[Ident]], [Ident], [Fact], [(Msg, Msg)])
+instantiate n states ineq =
+  let nstates = zip states [1 ..]
+      inst0 i n (State role msgs) =
+        let f (Atom a) =
+              if (isVariable a) && (a /= "SID")
+                then Atom (a ++ "_" ++ (show i) ++ "_" ++ (show n))
+                else Atom a
+            f (Comp o as) = Comp o (map f as)
+            varcheck = (nub (concatMap vars (map snd msgs))) \\ (nub (filter isVariable (map (\(Atom x) -> x) (filter isAtom (map snd msgs)))))
+         in if varcheck == []
+              then insSid n (State role (map (\(x, y) -> (f x, f y)) msgs))
+              else
+                error
+                  ( "Currently not supported:\n "
+                      ++ " role "
+                      ++ role
+                      ++ " does not know "
+                      ++ (show varcheck)
+                      ++ "\n"
+                      ++ " but functions of "
+                      ++ (show varcheck)
+                      ++ "\n."
+                  )
+      ik0 i n (State role msgs) =
+        let f (Atom a) =
+              if (isVariable a) && (a /= "SID")
+                then
+                  if a == role
+                    then (Atom "i")
+                    else Atom (a ++ "_" ++ (show i) ++ "_" ++ (show n))
+                else Atom a
+            f (Comp o as) = Comp o (map f as)
+         in if isVariable role
+              then map (Iknows . f) (map snd msgs)
+              else []
+      ik = nub (concat [ik0 i k f | k <- [1 .. n], (f, i) <- nstates])
+      insSid i (State r m) =
+        State r ((init m) ++ (map (\x -> (x, x)) [Atom (show (2 * i))]))
+      instfacts = [inst0 i k f | k <- [1 .. n], (f, i) <- nstates]
+      instineq0 i n (s, t) =
+        let f (Atom a) =
+              if (isVariable a) && (a /= "SID")
+                then Atom (a ++ "_" ++ (show i) ++ "_" ++ (show n))
+                else Atom a
+            f (Comp o as) = Comp o (map f as)
+         in (f s, f t)
+      instineq = [instineq0 i k e | k <- [1 .. n], (_, i) <- nstates, e <- ineq]
+      aglili =
+        [ nub [name ++ "_" ++ (show (i)) ++ "_" ++ (show k) | k <- [1 .. n]]
+          | (State r msgs, i) <- nstates,
+            name <-
+              ( (filter ((/=) "SID"))
+                  . (filter isVariable)
+                  . (concatMap idents)
+                  . (concatMap getMsgs)
+              )
+                [(State r msgs)],
+            isVariable name
+        ]
+      honestNames =
+        nub
+          [ name ++ "_" ++ (show (i)) ++ "_" ++ (show k)
+            | (State _ ((_, Atom name) : _), i) <- nstates,
+              k <- [1 .. n],
+              isVariable name
+          ]
+      allNames =
+        ( nub
+            . (filter ((/=) "SID"))
+            . (filter isVariable)
+            . (concatMap idents)
+            . (concatMap getMsgs)
+        )
+          instfacts
+   in ( instfacts,
+        honestNames,
+        aglili,
+        allNames,
+        (Iknows $ Atom "guessPW") : ik,
+        instineq
+      )

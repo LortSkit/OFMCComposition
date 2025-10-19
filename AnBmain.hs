@@ -27,7 +27,7 @@ import VertTranslator
 
 mkIF :: Protocol -> AnBOptsAndPars -> String
 mkIF (protocol@(_, typdec, knowledge, _, _, _)) args =
-  ( if (vert args) then (\x -> x ++ endstr False). ruleList (if2cif args). vertformats else
+  ( if (vert args) then (\x -> x ++ endstr False). ruleList (if2cif args).vertaddInit. vertformats else
   ( if (outt args) == IF
         then (\x -> x ++ endstr (noowngoal args)) . ruleList (if2cif args)
         else
