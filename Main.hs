@@ -43,7 +43,6 @@ usage =
   "usage: ofmc [<OPTIONS>] <INPUT FILE>\n"
     ++ "Options:\n"
     ++ "  --numSess <INT>  specify the number of sessions (for an AnB spec)\n"
-    ++ "  --vert           (for AnB files only:) interpret protocol as an app or ch protocol"
     ++ "  --of IF          (for AnB files only:) do not check, but produce AVISPA IF\n"
     ++ "  --of Isa         (for AnB files only:) generate a fixedpoint proof for Isabelle-OFMC\n"
     ++ "  --of AVANTSSAR   print result in AVANTSSAR Output Format\n"
@@ -243,7 +242,6 @@ parseArgs (x : xs) =
           theory = Nothing,
           anboutput = Nothing,
           numSess = Nothing,
-          vert = False,
           outt = Internal,
           typed = True,
           iterateFP = 0,
@@ -295,8 +293,6 @@ parseArgs0 ("--numSess" : n : xs) (onp, anbonp) =
   if (numSess anbonp) == Nothing
     then parseArgs0 xs (onp, anbonp {numSess = Just (read n)})
     else error "Multiple Declarations of \"numSess\" on command line"
-parseArgs0 ("--vert" : xs) (onp, anbonp) =
-  parseArgs0 xs (onp, anbonp{vert=True})
 parseArgs0 ("-typed" : xs) (onp, anbonp) =
   parseArgs0 xs (onp, anbonp {typed = True})
 parseArgs0 ("--of" : "FP" : xs) (onp, anbonp) =
