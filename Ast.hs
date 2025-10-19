@@ -18,6 +18,7 @@ module Ast where
 import Data.List
 import Data.Maybe
 import Msg
+import Data.Set (Set)
 
 -- | The type @Protocol@ is the type for the result of the AnB-Parser,
 -- i.e. the topmost structure of the Abstract Syntax Tree (AST)
@@ -37,8 +38,10 @@ data Type
   | SymmetricKey
   | -- | for free user-defined function symbols (no input/output type specification)
     Function
-    -- | for Ch and App Payloads
-  | Payload
+  |  -- | for Ch and App Sets 
+    Set
+  |  -- | for Ch and App Payloads
+    Payload
   | -- | special type for the purpose-argument of witness and request facts
     Purpose
   | -- | Formats - public transparent functions -> encoded as pairs

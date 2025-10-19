@@ -98,6 +98,7 @@ type :: {Type}
          "Public_key" -> PublicKey           -- in all spellings, it is a registered trademark!
          "Symmetric_key" -> SymmetricKey 
          "Function" -> Function
+         "Set" -> Set
          "Payload" -> Payload
          "Format" -> Format
          "Untyped" -> Untyped

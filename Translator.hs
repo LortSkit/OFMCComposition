@@ -810,6 +810,7 @@ printTypes =
       f (PublicKey, ids) = (ppIdList ids) ++ ":public_key\n"
       f (SymmetricKey, ids) = (ppIdList ids) ++ ":symmetric_key\n"
       f (Function, ids) = (ppIdList ids) ++ ":function\n"
+      f (Set, ids) = error "Sets are only permitted when using --vert flag!"
       f (Payload, ids) = (ppIdList ids) ++ ":t_payload\n"
       f (Custom x, ids) = (ppIdList ids) ++ ":t_" ++ x ++ "\n"
       f (Untyped, _) = ""
