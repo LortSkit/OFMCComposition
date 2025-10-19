@@ -25,6 +25,7 @@ import LMsg
 import Msg
 import MsgPat
 import Translator
+import ProtocolTranslationTypes
 
 debughead :: String -> [a] -> a
 debughead str [] = error $ "Head on empty list: " ++ str

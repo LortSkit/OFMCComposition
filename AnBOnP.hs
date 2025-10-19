@@ -61,6 +61,8 @@ data AnBOptsAndPars
     anboutput :: Maybe String,
     -- | Number of sessions (for translation to IF)
     numSess :: Maybe Int,
+    -- | flag for vertical comp model (either app or ch protocol)
+    vert :: Bool,
     -- | Output type
     outt :: OutputType,
     -- | flag for typed protocol model

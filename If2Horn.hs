@@ -24,6 +24,7 @@ import Msg
 import NewIfLexer
 import NewIfParser
 import Translator
+import ProtocolTranslationTypes
 
 if2horn :: PProt -> HornRep
 if2horn = if2horn0 (HR {initialH = [], absrulesH = [], rulesH = [], typesH = []})

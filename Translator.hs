@@ -17,55 +17,16 @@ module Translator where
 
 import AnBOnP
 import Ast
-import Constants
 import Control.Monad
 import Data.List
 import Data.Maybe
 import LMsg
 import Msg
 import MsgPat
+import ProtocolTranslationTypes
 
 --------- Facts, Rules, and the Translation State ---------------
-
-data Fact
-  = State Ident [LMsg]
-  | FPState Ident [Msg]
-  | Iknows Msg
-  | Fact Ident [Msg]
-  deriving (Eq, Show)
-
-type Rule = ([Fact], Eqs, [Ident], [Fact])
-
-lhs (l, _, _) = l
-
-rhs (_, _, r) = r
-
-frv (_, f, _) = f
-
-identsF :: Fact -> [Ident]
-identsF (State _ msgs) = error "identsf of state"
-identsF (FPState _ msgs) = nub (concatMap idents msgs)
-identsF (Iknows msg) = nub (idents msg)
-identsF (Fact _ msgs) = nub (concatMap idents msgs)
-
-identsFL m = nub (concatMap identsF m)
-
-type Rule' = (Rule, ProtocolState, ProtocolState)
-
-type Eqs = [(Msg, Msg)]
-
-type Role = (Ident, [Rule'])
-
-data ProtocolTranslationState = PTS
-  { protocol :: Protocol,
-    options :: AnBOptsAndPars,
-    roles :: [Role],
-    rules :: [Rule],
-    initial :: String
-  }
-
-mkPTS :: Protocol -> AnBOptsAndPars -> ProtocolTranslationState
-mkPTS protocol options = PTS {protocol = protocol, options = options, roles = [], rules = [], initial = ""}
+-- now in the ProtocolTranslationTypes.hs file
 
 ---- Translation Stage 1a: Formats & Channels
 
@@ -121,6 +82,7 @@ fAct formats ((sp@(sender, b1, Nothing), Secure, rp@(receiver, b2, Nothing)), m,
               then Comp Cat [senderpk, Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]]
               else Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]
        in (((sender, False, Nothing), Insecure, (receiver, False, Nothing)), fMsg formats m', Nothing, Nothing)
+fAct formats ((sp@(_,_,_),ChannelProtocol,rp@(_,_,_)),_,_,_) = error "-Ch-> symbol only allowed when using --vert flag!"
 fAct formats ((sp@(sender, b1, Just _), _, _), _, _, _) = error "Explicit pseudonyms not supported right now."
 fAct formats ((_, _, rp@(receiver, b2, Just _)), _, _, _) = error "Explicit pseudonyms not supported right now."
 -- (fChan formats channel,fMsg formats m,Nothing,Nothing)
@@ -848,6 +810,7 @@ printTypes =
       f (PublicKey, ids) = (ppIdList ids) ++ ":public_key\n"
       f (SymmetricKey, ids) = (ppIdList ids) ++ ":symmetric_key\n"
       f (Function, ids) = (ppIdList ids) ++ ":function\n"
+      f (Payload, ids) = (ppIdList ids) ++ ":t_payload\n"
       f (Custom x, ids) = (ppIdList ids) ++ ":t_" ++ x ++ "\n"
       f (Untyped, _) = ""
       f (Format, ids) = (ppIdList ids) ++ ":text" ++ "\n"
