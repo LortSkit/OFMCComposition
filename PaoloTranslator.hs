@@ -66,6 +66,7 @@ ppRule outf (l, [], f, r) =
     ++ (ppFactList outf r)
     ++ "\n"
 
+ppRuleList :: OutputType -> [([Fact], [(Msg, Msg)], [Ident], [Fact])] -> [Char]
 ppRuleList Isa list =
   let ppRL Isa (x : xs) c = "step rule_" ++ (show c) ++ ":\n" ++ (ppRule Isa x) ++ "\n" ++ (ppRL Isa xs (c + 1))
       ppRL Isa [] _ = ""
