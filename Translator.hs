@@ -121,10 +121,6 @@ fAct formats ((sp@(sender, b1, Nothing), Secure, rp@(receiver, b2, Nothing)), m,
               then Comp Cat [senderpk, Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]]
               else Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]
        in (((sender, False, Nothing), Insecure, (receiver, False, Nothing)), fMsg formats m', Nothing, Nothing)
-fAct formats ((sp@(sender, False, Nothing), ChannelProtocol, rp@(receiver, False, Nothing)), m, Nothing, Nothing) =
-  ((sp, ChannelProtocol, rp), fMsg formats m, Nothing, Nothing)
-fAct formats ((sp@(sender, _, Nothing), ChannelProtocol, rp@(receiver, _, Nothing)), m, Nothing, Nothing) =
-  error "Pseudonymous endpoint using a channel protocol. Why?\n"
 fAct formats ((sp@(sender, b1, Just _), _, _), _, _, _) = error "Explicit pseudonyms not supported right now."
 fAct formats ((_, _, rp@(receiver, b2, Just _)), _, _, _) = error "Explicit pseudonyms not supported right now."
 -- (fChan formats channel,fMsg formats m,Nothing,Nothing)
@@ -852,7 +848,6 @@ printTypes =
       f (PublicKey, ids) = (ppIdList ids) ++ ":public_key\n"
       f (SymmetricKey, ids) = (ppIdList ids) ++ ":symmetric_key\n"
       f (Function, ids) = (ppIdList ids) ++ ":function\n"
-      f (Payload, ids) = (ppIdList ids) ++ "t_payload\n"
       f (Custom x, ids) = (ppIdList ids) ++ ":t_" ++ x ++ "\n"
       f (Untyped, _) = ""
       f (Format, ids) = (ppIdList ids) ++ ":text" ++ "\n"
