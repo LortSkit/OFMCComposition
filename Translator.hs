@@ -75,7 +75,7 @@ formats pts =
       formats = concatMap snd ((filter (\(x, y) -> x == Format)) types)
       knowledge' = fKnow formats knowledge
       abstractions' = map (fAbs formats) abstractions
-      actions' = map (fAct formats) actions
+      actions' = (if vert (options pts) then map (fACt formats) actions else map (fAct formats) actions)
       goals' = map (fGoal formats) goals
    in pts {protocol = (name, types, knowledge', abstractions', actions', goals')}
 
@@ -121,11 +121,28 @@ fAct formats ((sp@(sender, b1, Nothing), Secure, rp@(receiver, b2, Nothing)), m,
               then Comp Cat [senderpk, Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]]
               else Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]
        in (((sender, False, Nothing), Insecure, (receiver, False, Nothing)), fMsg formats m', Nothing, Nothing)
+fAct formats ((sp@(sender, _, _), ChannelProtocol, _), _, _, _) = error "Channel protocols only supported when using --vert flag!"
 fAct formats ((sp@(sender, b1, Just _), _, _), _, _, _) = error "Explicit pseudonyms not supported right now."
 fAct formats ((_, _, rp@(receiver, b2, Just _)), _, _, _) = error "Explicit pseudonyms not supported right now."
 -- (fChan formats channel,fMsg formats m,Nothing,Nothing)
 fAct formats (_, _, _, _) = error "zero knowledge not supported here\n"
 
+-- this is what happens instead when using --vert for ChannelProtocol (rest remains the same???)
+fACt formats ((sp@(sender, b1, Nothing), ChannelProtocol, rp@(receiver, b2, Nothing)), m, Nothing, Nothing) =
+  if b1 && b2
+    then error "Both endpoints of a secure channel pseudonymous. Why?\n"
+    else
+      let senderpk = if b1 then Comp Pseudonym [Atom sender] else Comp AuthChan [Atom sender]
+          receiverpk = if b2 then Comp Pseudonym [Atom receiver] else Comp ConfChan [Atom receiver]
+          m' =
+            if b1
+              then Comp Cat [senderpk, Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]]
+              else Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]
+       in (((sender, False, Nothing), Insecure, (receiver, False, Nothing)), fMsg formats m', Nothing, Nothing) 
+fACt formats ((sp@(_,_,_),ChannelProtocol,_),_,_,_) = error "Wtf? unaccounted channel protcol error encountered: -Ch-> cannot be used like this!"
+fACt formats x = fAct formats x
+
+fChan :: (Monad m1, Monad m2) => [Ident] -> ((a1, b1, m1 Msg), b2, (a2, b3, m2 Msg)) -> ((a1, b1, m1 Msg), b2, (a2, b3, m2 Msg))
 fChan formats (p1, chtype, p2) = (fPeer formats p1, chtype, fPeer formats p2)
 
 fPeer formats (id, b, mm) = (id, b, liftM (fMsg formats) mm)
@@ -848,6 +865,7 @@ printTypes =
       f (PublicKey, ids) = (ppIdList ids) ++ ":public_key\n"
       f (SymmetricKey, ids) = (ppIdList ids) ++ ":symmetric_key\n"
       f (Function, ids) = (ppIdList ids) ++ ":function\n"
+      f (Payload, ids) = (ppIdList ids) ++ ":t_payload\n"
       f (Custom x, ids) = (ppIdList ids) ++ ":t_" ++ x ++ "\n"
       f (Untyped, _) = ""
       f (Format, ids) = (ppIdList ids) ++ ":text" ++ "\n"
