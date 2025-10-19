@@ -183,16 +183,16 @@ createRule fresh freshpks role state incomin outgoin =
           Nothing -> (state, Atom "i")
           Just (sender, ct, receiver, recm, Nothing) ->
             let st = (receiveMsg recm state)
-             in (st, chtrafo False sender ct receiver (snd (last st)))
+             in (state, chtrafo False sender ct receiver (snd (last st)))
           Just (sender, ct, receiver, recm, Just recmp) ->
             let st = (receiveLMsg (recm, recmp) state)
-             in (st, chtrafo False sender ct receiver (snd (last st)))
+             in (state, chtrafo False sender ct receiver (snd (last st)))
       (state2, msg2) =
         case outgoin of
           Nothing -> (state1, Atom "i")
           Just (sender, ct, receiver, sndm, _) ->
             let state1' = peertrafo receiver msg1 state1
-                st = sendMsg sndm (state1' ++ (map (\x -> (Atom x, Atom x)) fresh) ++ (map (\x -> (Comp Inv [Atom x], Comp Inv [Atom x])) freshpks))
+                st = sendMsgAnyway sndm (state1' ++ (map (\x -> (Atom x, Atom x)) fresh) ++ (map (\x -> (Comp Inv [Atom x], Comp Inv [Atom x])) freshpks))
              in (st, chtrafo True sender ct receiver (snd (last st)))
    in ( ( ( State
               role
@@ -208,12 +208,18 @@ createRule fresh freshpks role state incomin outgoin =
           fresh,
           ( State
               role
-              (((nubBy eqSnd) . (\x -> (Atom role, Atom role) : (x ++ [(Atom "SID", Atom "SID")]))) state2)
+              (((nubBy eqSnd) . (\x -> (Atom role, Atom role) : (x ++ [(Atom "SID", Atom "SID")]))) state1)
           )
             : (if msg2 == (Atom "i") then [] else [Iknows msg2])
         ),
-        state2
+        state1
       )
+
+sendMsgAnyway :: Msg -> ProtocolState -> ProtocolState
+sendMsgAnyway msg state =
+  case synthesisPattern state msg of
+    Nothing ->state ++ [(msg, msg)] -- i have no idea what I'm doing
+    Just p -> state ++ [(msg, p)]
 
 eqSnd (_, a) (_, b) = a == b
 
