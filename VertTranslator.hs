@@ -543,7 +543,7 @@ firstRuleSplitApp rules =
   let (l,eq,eqid,r) = head rules 
       append a [] = [a]
       append a (x:xs) = x:append a xs
-      l1 = append (Fact "TEMP" [Comp Neq [Atom "C", Atom "i"]]) l -- TODO: Grab C from knowledge s.t. it is not hard-coded!!!
+      l1 = append (Fact "&" [Comp Neq [Atom "C", Atom "i"]]) l -- TODO: Grab C from knowledge s.t. it is not hard-coded!!!
   in (l1,eq,eqid,r) : tail rules
 
 ppRuleIF2CIF :: Rule -> Rule

@@ -20,7 +20,7 @@ module Msg(Ident,Operator(..),Msg(..),Theory,
 	   eqMod,eqModBound,(===),catty,deCat,stdTheo,
 	   synthesizable,analysis,indy,
 	   normalizeXor,
-	   ppId,ppIdList,ppMsg,ppMsgList,ppXList,match0,isAtype,isntFunction)  where
+	   ppId,ppIdList,ppMsg,ppMsgList,ppMsgListAnds,ppXList,match0,isAtype,isntFunction)  where
 import AnBOnP
 import Data.List
 import Data.Maybe
@@ -525,6 +525,11 @@ ppMsgList ot list =
   case ot of
   Isa -> ppXList (ppMsg ot) "," (filter firstorder list)
   _ -> ppXList (ppMsg ot) "," list
+
+ppMsgListAnds ot list = 
+  case ot of
+    IF -> ppXList (ppMsg ot) " " (filter firstorder list)
+    _  -> error "& facts only supported in IF!"
 
 firstorder (Comp Apply [Atom "typeFun",_]) = False
 firstorder _ = True
