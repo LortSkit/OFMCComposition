@@ -181,19 +181,19 @@ createRule fresh freshpks role state incomin outgoin =
   let (state1, msg1) =
         case incomin of
           Nothing -> (state, Atom "i")
-          Just (sender, ct, receiver, recm, Nothing) ->
-            let st = (receiveMsg recm state)
-             in (state, chtrafo False sender ct receiver (snd (last st)))
+          Just (sender, ct, receiver, recm, Nothing) -> (state, Atom "i")
+            -- let st = (receiveMsg recm state)
+            --  in (state, chtrafo False sender ct receiver (snd (last st)))
           Just (sender, ct, receiver, recm, Just recmp) ->
             let st = (receiveLMsg (recm, recmp) state)
              in (state, chtrafo False sender ct receiver (snd (last st)))
       (state2, msg2) =
         case outgoin of
           Nothing -> (state1, Atom "i")
-          Just (sender, ct, receiver, sndm, _) ->
-            let state1' = peertrafo receiver msg1 state1
-                st = sendMsgAnyway sndm (state1' ++ (map (\x -> (Atom x, Atom x)) fresh) ++ (map (\x -> (Comp Inv [Atom x], Comp Inv [Atom x])) freshpks))
-             in (st, chtrafo True sender ct receiver (snd (last st)))
+          Just (sender, ct, receiver, sndm, _) -> (state1, Atom "i")
+            -- let state1' = peertrafo receiver msg1 state1
+            --     st = sendMsgAnyway sndm (state1' ++ (map (\x -> (Atom x, Atom x)) fresh) ++ (map (\x -> (Comp Inv [Atom x], Comp Inv [Atom x])) freshpks))
+            --  in (st, chtrafo True sender ct receiver (snd (last st)))
    in ( ( ( State
               role
               ( ( (nubBy eqSnd)
