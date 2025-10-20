@@ -946,7 +946,7 @@ ruleListIF (init, rules) sqns if2cif =
             nr1 = ppRuleIFHack x sqns
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
-         in "step trans" ++ (show n) ++ ":=\n" ++ (ppRule IF nr2) ++ "\n" ++ (ruleIF xs (n + 1))
+         in "step trans" ++ (show n) ++ ":=\n" ++ (ppRule IF nr2) ++ "\n\n" ++ (ruleIF xs (n + 1))
    in init ++ (ruleIF rules 0)
 
 ppRuleIF2CIF :: Rule -> Rule

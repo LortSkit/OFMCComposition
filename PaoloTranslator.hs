@@ -73,7 +73,7 @@ ppRule outf (l, [], f, r) =
     ++ (if f == [] then "=>" else "=[exists " ++ (ppIdList f) ++ "]=>")
     ++ "\n"
     ++ (ppFactListBetter outf r) -- usage of ppFactListBetter instead of ppFactList
-    ++ "\n"
+    -- ++ "\n"
 
 ppRuleList :: OutputType -> [([Fact], [(Msg, Msg)], [Ident], [Fact])] -> [Char]
 ppRuleList Isa list =

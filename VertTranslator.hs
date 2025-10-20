@@ -21,6 +21,7 @@ import Ast
 import Control.Monad
 import Data.List
 import Data.Maybe
+import Data.Text(pack,unpack,replace)
 import LMsg
 import Msg
 import MsgPat
@@ -529,22 +530,24 @@ ruleListIF :: (String, [Rule]) -> [Ident] -> Bool -> String
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ foldr (\a s ->show a ++ (ppRule IF a ++"\n") ++s ) ""  rules) False = undefined -- debug for --vert
 ruleListIF (init, rules) sqns if2cif =
   let ruleIF [] _ = ""
-      ruleIF (x : xs) n =
+      ruleIF (x : xs) (n,name) =
         let -- rule hacked SQN
             nr1 = ppRuleIFHack x sqns
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
-         in "step app" ++ (show (n+3)) ++ ":=\n" ++ (ppRule IF nr2) ++ "\n" ++ (ruleIF xs (n + 1)) -- TODO: make sure the name is app or ch based on the protocol!
-   in init ++ (ruleIF (firstRuleSplitApp rules) 0)
+            nextnrnm nr nm = if nm == "a" then (nr,"b") else ((nr+1),"")
+            appliednr2 = if name == "b" then (unpack . Data.Text.replace (pack ",C") (pack ",i") . pack) (ppRule IF nr2) else ppRule IF nr2
+         in "step app" ++ (show (n+3)) ++ name ++ ":=\n" ++ appliednr2 ++ ".\niknows(app" ++ (show (n+3)) ++ name ++ ")\n\n" ++ (ruleIF xs (nextnrnm n name)) -- TODO: make sure the name is app or ch based on the protocol!
+   in init ++ (ruleIF (firstRuleSplitApp rules) (0,"a"))
 
 firstRuleSplitApp :: [Rule] -> [Rule]
-firstRuleSplitApp rules | trace ("firstRuleSplitApp\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
+-- firstRuleSplitApp rules | trace ("firstRuleSplitApp\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
 firstRuleSplitApp rules = 
   let (l,eq,eqid,r) = head rules 
       append a [] = [a]
       append a (x:xs) = x:append a xs
       l1 = append (Fact "&" [Comp Neq [Atom "C", Atom "i"]]) l -- TODO: Grab C from knowledge s.t. it is not hard-coded!!!
-  in (l1,eq,eqid,r) : tail rules
+  in (l1,eq,eqid,r) : (l,eq,eqid,r) : tail rules
 
 ppRuleIF2CIF :: Rule -> Rule
 -- ppRuleIF2CIF r | trace ("ppRuleIF2CIF\n\tr: " ++ ppRule IF r) False = undefined
@@ -594,7 +597,7 @@ split sep list =
 
 subMsgIF2CIFLabel :: Msg -> Msg
 -- subMsgIF2CIFLabel (Atom a) | trace ("subMsgIF2CIFLabel\n\tAtom a: " ++ show a) False = undefined
-subMsgIF2CIFLabel (Atom a) = Atom (replace "XCryptblind" "XCryptpk" a) -- blind cleanup
+subMsgIF2CIFLabel (Atom a) = Atom (VertTranslator.replace "XCryptblind" "XCryptpk" a) -- blind cleanup
 subMsgIF2CIFLabel (Comp op xs) = Comp op (map subMsgIF2CIFLabel xs)
 
 filterLMsg :: [LMsg] -> [LMsg]
