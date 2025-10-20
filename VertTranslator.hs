@@ -27,6 +27,7 @@ import MsgPat
 import PaoloTranslator
 import ProtocolTranslationTypes
 import LMsg (LMsg)
+import Debug.Trace
 
 vertformats :: ProtocolTranslationState -> ProtocolTranslationState
 vertformats pts =
@@ -525,6 +526,7 @@ vertruleList if2cif pts =
 
 ruleListIF :: (String, [Rule]) -> [Ident] -> Bool -> String
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ init ++ "\n" ++ foldr (\a s ->(ppRule IF a ++"\n") ++s ) ""  rules) False = undefined
+-- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ foldr (\a s ->show a ++ (ppRule IF a ++"\n") ++s ) ""  rules) False = undefined -- debug for --vert
 ruleListIF (init, rules) sqns if2cif =
   let ruleIF [] _ = ""
       ruleIF (x : xs) n =
@@ -533,7 +535,16 @@ ruleListIF (init, rules) sqns if2cif =
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
          in "step app" ++ (show (n+3)) ++ ":=\n" ++ (ppRule IF nr2) ++ "\n" ++ (ruleIF xs (n + 1)) -- TODO: make sure the name is app or ch based on the protocol!
-   in init ++ (ruleIF rules 0)
+   in init ++ (ruleIF (firstRuleSplitApp rules) 0)
+
+firstRuleSplitApp :: [Rule] -> [Rule]
+firstRuleSplitApp rules | trace ("firstRuleSplitApp\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
+firstRuleSplitApp rules = 
+  let (l,eq,eqid,r) = head rules 
+      append a [] = [a]
+      append a (x:xs) = x:append a xs
+      l1 = append (Fact "TEMP" [Comp Neq [Atom "C", Atom "i"]]) l -- TODO: Grab C from knowledge s.t. it is not hard-coded!!!
+  in (l1,eq,eqid,r) : tail rules
 
 ppRuleIF2CIF :: Rule -> Rule
 -- ppRuleIF2CIF r | trace ("ppRuleIF2CIF\n\tr: " ++ ppRule IF r) False = undefined
