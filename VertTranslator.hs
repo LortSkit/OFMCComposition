@@ -203,14 +203,14 @@ createRule fresh freshpks role state incomin outgoin =
                   state1
               )
           )
-            : (if msg1 == (Atom "i") then [] else [Iknows msg1]),
+            : (if msg1 == (Atom "i") then [Fact "contains" [Comp Apply [Atom "c", Atom "T"],Atom "globalcounter"]] else [Iknows msg1]),
           [],
           fresh,
           ( State
               role
               (((nubBy eqSnd) . (\x -> (Atom role, Atom role) : (x ++ [(Atom "SID", Atom "SID")]))) state1)
           )
-            : (if msg2 == (Atom "i") then [] else [Iknows msg2])
+            : (if msg2 == (Atom "i") then [Fact "contains" [Atom "T", Atom "globalcounter"]] else [Iknows msg2])
         ),
         state1
       )
@@ -355,15 +355,19 @@ vertaddInit pts =
                 then
                   ( "section types:\n"
                       ++ (ppIdList agents)
+                      ++ ":agent\n"
                       ++ (printTypes typdec)
                       ++ (printTypes [(Function, ["sent","secCh"])]) -- only have this if App protocol!!! -- Should i make them protected keywords like "secret" is?
                       -- ++ (printTypes [(Set, ["opened","closed"])]) -- only have this if Ch protocol
+                      ++ (printTypes [(Function, ["c"])])
+                      ++ (printTypes [(Set, ["globalcounter"])])
                       ++ "\n"
                   )
                 else ""
             )
               ++ "section inits:\n"
               ++ " initial_state init1 :=\n"
+              ++ "contains(apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,0))))))),globalcounter).\n" -- TODO: Make sure it contains as many steps as specified (somewhere)! 
               ++ (ppFactList IF facts)
               ++ (concatMap (\x -> " & " ++ (ppId x) ++ "/=i") honest)
               ++
@@ -393,6 +397,7 @@ printTypes =
       f (PublicKey, ids) = (ppIdList ids) ++ ":public_key\n"
       f (SymmetricKey, ids) = (ppIdList ids) ++ ":symmetric_key\n"
       f (Function, ids) = (ppIdList ids) ++ ":function\n"
+      f (Set, ids) = (ppIdList ids) ++ ":set\n" -- should only be used when using --vert!
       f (Payload, ids) = (ppIdList ids) ++ ":payload\n"
       f (Custom x, ids) = (ppIdList ids) ++ ":t_" ++ x ++ "\n"
       f (Untyped, _) = ""
