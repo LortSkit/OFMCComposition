@@ -50,7 +50,9 @@ ppFactList outf = (ppXList (ppFact outf) ".\n") . (filter isntIknowsFunction)
                             
 -- meant to fix some things when using, e.g., & C/=i with the --vert flag, but should affect normal usage
 ppFactListBetter outf = let ppXListBetter :: (Fact -> String) -> String -> [Fact] -> String 
-                            ppXListBetter ppX sp (fact1:[]) = sp ++ ppX fact1
+                            ppXListBetter ppX sp (fact1:[]) = case fact1 of
+                                                                      Fact "&" _ -> "\n" ++ ppX fact1
+                                                                      _          -> sp ++ ppX fact1
                             ppXListBetter ppX sp (fact1:facts) = case fact1 of
                                                                       Fact "&" _ -> "\n" ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
                                                                       _          -> sp ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts

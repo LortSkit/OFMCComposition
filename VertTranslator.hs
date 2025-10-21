@@ -126,9 +126,9 @@ vertcreateRules pts =
             . (filter (\x -> case (fst x) of Agent _ _ -> True; _ -> False))
         )
           types
-   in pts {rules = manageRules 0 frMsg (\x -> initialState (lookupL x knowledge)) actions pks}
+   in pts {rules = manageRules 0 frMsg (\x -> initialState (lookupL x knowledge)) actions pks (length actions)}
 
-manageRules step fresh states actions pks =
+manageRules step fresh states actions pks totalnrsteps =
   --- about step number (=list index+1)
   --- initially 0: there is no incoming message
   --- finally (length actions): there is no outgoing message
@@ -166,7 +166,7 @@ manageRules step fresh states actions pks =
                           ++ (show b')
                       )
                   else fromJust b
-      (rule, state') = createRule thisfresh freshpks ub (states ub) min mout
+      (rule, state') = createRule thisfresh freshpks ub (states ub) min mout step totalnrsteps
    in rule
         : ( if step == (length actions)
               then []
@@ -177,25 +177,40 @@ manageRules step fresh states actions pks =
                   (\x -> if x == ub then state' else states x)
                   actions
                   pks
+                  totalnrsteps
           )
 
-createRule fresh freshpks role state incomin outgoin =
+createRule fresh freshpks role state incomin outgoin step totalnrsteps =
   let (state1, msg1) =
         case incomin of
           Nothing -> (state, Atom "i")
-          Just (sender, ct, receiver, recm, Nothing) -> (state, Atom "i")
-            -- let st = (receiveMsg recm state)
-            --  in (state, chtrafo False sender ct receiver (snd (last st)))
+          Just (sender, ct, receiver, recm, Nothing) ->
+            let st = (receiveMsg recm state)
+             in (state, chtrafo False sender ct receiver (snd (last st)))
           Just (sender, ct, receiver, recm, Just recmp) ->
             let st = (receiveLMsg (recm, recmp) state)
              in (state, chtrafo False sender ct receiver (snd (last st)))
       (state2, msg2) =
         case outgoin of
           Nothing -> (state1, Atom "i")
-          Just (sender, ct, receiver, sndm, _) -> (state1, Atom "i")
-            -- let state1' = peertrafo receiver msg1 state1
-            --     st = sendMsgAnyway sndm (state1' ++ (map (\x -> (Atom x, Atom x)) fresh) ++ (map (\x -> (Comp Inv [Atom x], Comp Inv [Atom x])) freshpks))
-            --  in (st, chtrafo True sender ct receiver (snd (last st)))
+          Just (sender, ct, receiver, sndm, _) ->
+            let state1' = peertrafo receiver msg1 state1
+                st = sendMsgAnyway sndm (state1' ++ (map (\x -> (Atom x, Atom x)) fresh) ++ (map (\x -> (Comp Inv [Atom x], Comp Inv [Atom x])) freshpks))
+             in (st, chtrafo True sender ct receiver (snd (last st)))
+      firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"],Atom "globalcounter"] -- TODO: make sure c and T are unique!
+      secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
+      msgstruct msg = Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]] -- is removed from app3b in firstRuleSplitApp later
+      incommingmsg = if msg1 == (Atom "i") then [] else [msgstruct msg1]--TODO: Make sure to get s & C's role names from knowledge!
+      outgoingmsg  = if msg2 == (Atom "i") then [] else [msgstruct msg2]--TODO: Make sure to get s & C's role names from knowledge!
+
+      sentappfact = Fact "contains" [Atom "N", Comp Apply [Atom "sent", Comp Cat [Atom "s", Atom "C"]]]
+
+      firstfactlist = if step == totalnrsteps 
+                      then firstfact : sentappfact : incommingmsg --TODO: Make sure to get s & C's role names from knowledge and N from the rule!
+                      else firstfact : incommingmsg
+      secondfactlist = if step == 0 
+                       then secondfact : sentappfact : outgoingmsg
+                       else secondfact : outgoingmsg
    in ( ( ( State
               role
               ( ( (nubBy eqSnd)
@@ -205,14 +220,14 @@ createRule fresh freshpks role state incomin outgoin =
                   state1
               )
           )
-            : (if msg1 == (Atom "i") then [Fact "contains" [Comp Apply [Atom "c", Atom "T"],Atom "globalcounter"]] else [Iknows msg1]),
+            : (firstfactlist),
           [],
           fresh,
           ( State
               role
               (((nubBy eqSnd) . (\x -> (Atom role, Atom role) : (x ++ [(Atom "SID", Atom "SID")]))) state1)
           )
-            : (if msg2 == (Atom "i") then [Fact "contains" [Atom "T", Atom "globalcounter"]] else [Iknows msg2])
+            : (secondfactlist)
         ),
         state1
       )
@@ -547,7 +562,18 @@ firstRuleSplitApp rules =
       append a [] = [a]
       append a (x:xs) = x:append a xs
       l1 = append (Fact "&" [Comp Neq [Atom "C", Atom "i"]]) l -- TODO: Grab C from knowledge s.t. it is not hard-coded!!!
-  in (l1,eq,eqid,r) : (l,eq,eqid,r) : tail rules
+      lastelem [] = error "firstRuleSplitApp: cannot use internal function 'lastelem' on empty list!"
+      lastelem (elem:[]) = elem
+      lastelem (x:xs) = lastelem xs
+      msg = case lastelem r of
+            Fact "contains" [x,y] -> x
+            _                     -> error "firstRuleSplitApp failed! Guess I'm an idiot :c"
+      replacelastelem rep [] = error "firstRuleSplitApp: cannot use internal function 'replacelastelem' on empty list!"
+      replacelastelem rep (elem:[]) = rep:[]
+      replacelastelem rep (x:xs) = x:replacelastelem rep xs
+      newfact = Iknows msg
+      r2 = replacelastelem newfact r
+  in (l1,eq,eqid,r) : (l,eq,eqid,r2) : tail rules
 
 ppRuleIF2CIF :: Rule -> Rule
 -- ppRuleIF2CIF r | trace ("ppRuleIF2CIF\n\tr: " ++ ppRule IF r) False = undefined
