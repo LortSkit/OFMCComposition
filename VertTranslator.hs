@@ -115,8 +115,8 @@ fMsg formats (Atom a) = Atom a
 ---- Translation Stage 1: Creating Rules
 ----------------------------------------
 
-vertcreateRules :: ProtocolTranslationState -> ProtocolTranslationState
-vertcreateRules pts =
+vertcreateRules :: Bool -> ProtocolTranslationState -> ProtocolTranslationState
+vertcreateRules isappprot pts =
   let (p@(_, types, knowledge, abstractions, actions, goals)) = protocol pts
       frMsg = fresh p
       pks = concatMap snd ((filter (\(x, y) -> x == PublicKey)) types)
@@ -126,9 +126,9 @@ vertcreateRules pts =
             . (filter (\x -> case (fst x) of Agent _ _ -> True; _ -> False))
         )
           types
-   in pts {rules = manageRules 0 frMsg (\x -> initialState (lookupL x knowledge)) actions pks (length actions)}
+   in pts {rules = manageRules 0 frMsg (\x -> initialState (lookupL x knowledge)) actions pks (length actions) isappprot}
 
-manageRules step fresh states actions pks totalnrsteps =
+manageRules step fresh states actions pks totalnrsteps isappprot =
   --- about step number (=list index+1)
   --- initially 0: there is no incoming message
   --- finally (length actions): there is no outgoing message
@@ -166,7 +166,7 @@ manageRules step fresh states actions pks totalnrsteps =
                           ++ (show b')
                       )
                   else fromJust b
-      (rule, state') = createRule thisfresh freshpks ub (states ub) min mout step totalnrsteps
+      (rule, state') = createRule thisfresh freshpks ub (states ub) min mout step totalnrsteps isappprot
    in rule
         : ( if step == (length actions)
               then []
@@ -178,9 +178,10 @@ manageRules step fresh states actions pks totalnrsteps =
                   actions
                   pks
                   totalnrsteps
+                  isappprot
           )
 
-createRule fresh freshpks role state incomin outgoin step totalnrsteps =
+createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot =
   let (state1, msg1) =
         case incomin of
           Nothing -> (state, Atom "i")
@@ -199,17 +200,19 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps =
              in (st, chtrafo True sender ct receiver (snd (last st)))
       firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"],Atom "globalcounter"] -- TODO: make sure c and T are unique!
       secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
-      msgstruct msg = Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]] -- is removed from app3b in firstRuleSplitApp later
-      incommingmsg = if msg1 == (Atom "i") then [] else [msgstruct msg1]--TODO: Make sure to get s & C's role names from knowledge!
-      outgoingmsg  = if msg2 == (Atom "i") then [] else [msgstruct msg2]--TODO: Make sure to get s & C's role names from knowledge!
+      msgstruct msg = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]]] else [] -- is removed from app3b in firstRuleSplitApp later
+      incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1--TODO: Make sure to get s & C's role names from knowledge!
+      outgoingmsg  = if msg2 == (Atom "i") then [] else msgstruct msg2--TODO: Make sure to get s & C's role names from knowledge!
 
-      sentappfact = Fact "contains" [Atom "N", Comp Apply [Atom "sent", Comp Cat [Atom "s", Atom "C"]]]
+      sentappfact = Fact "contains" [Atom "N", Comp Apply [Atom "sent", Comp Cat [Atom "s", Atom "C"]]] --TODO: Make sure to get N's name from knowledge!
+      sentchfact  = Fact "TEMP" [] -- Fact "contains" [Atom "G", Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]] --TODO: Make sure to get N's name from knowledge!
+      sentfact = if isappprot then sentappfact else sentchfact
 
       firstfactlist = if step == totalnrsteps 
-                      then firstfact : sentappfact : incommingmsg --TODO: Make sure to get s & C's role names from knowledge and N from the rule!
+                      then firstfact : sentfact : incommingmsg --TODO: Make sure to get s & C's role names from knowledge and N from the rule!
                       else firstfact : incommingmsg
       secondfactlist = if step == 0 
-                       then secondfact : sentappfact : outgoingmsg
+                       then secondfact : sentfact : outgoingmsg
                        else secondfact : outgoingmsg
    in ( ( ( State
               role
@@ -535,15 +538,15 @@ getTypes :: Protocol -> Types
 getTypes (_, t, _, _, _, _) = t
 
 -- <paolo>
-vertruleList :: Bool -> ProtocolTranslationState -> String
-vertruleList if2cif pts =
+vertruleList :: Bool -> Bool -> ProtocolTranslationState -> String
+vertruleList if2cif isappprot pts =
   -- pass the list of SQNs
-  ruleListIF (initial pts, rules pts) (trTypes2Ids (getTypes (protocol pts)) SeqNumber) if2cif
+  ruleListIF (initial pts, rules pts) (trTypes2Ids (getTypes (protocol pts)) SeqNumber) if2cif isappprot
 
-ruleListIF :: (String, [Rule]) -> [Ident] -> Bool -> String
+ruleListIF :: (String, [Rule]) -> [Ident] -> Bool -> Bool -> String
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ init ++ "\n" ++ foldr (\a s ->(ppRule IF a ++"\n") ++s ) ""  rules) False = undefined
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ foldr (\a s ->show a ++ (ppRule IF a ++"\n") ++s ) ""  rules) False = undefined -- debug for --vert
-ruleListIF (init, rules) sqns if2cif =
+ruleListIF (init, rules) sqns if2cif isappprot=
   let ruleIF [] _ = ""
       ruleIF (x : xs) (n,name) =
         let -- rule hacked SQN
@@ -552,12 +555,14 @@ ruleListIF (init, rules) sqns if2cif =
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
             nextnrnm nr nm = if nm == "a" then (nr,"b") else ((nr+1),"")
             appliednr2 = if name == "b" then (unpack . Data.Text.replace (pack ",C") (pack ",i") . pack) (ppRule IF nr2) else ppRule IF nr2
-         in "step app" ++ (show (n+3)) ++ name ++ ":=\n" ++ appliednr2 ++ ".\niknows(app" ++ (show (n+3)) ++ name ++ ")\n\n" ++ (ruleIF xs (nextnrnm n name)) -- TODO: make sure the name is app or ch based on the protocol!
-   in init ++ (ruleIF (firstRuleSplitApp rules) (0,"a"))
+            stepname = if isappprot then "app" else "ch"
+         in "step " ++ stepname ++ (show (n+3)) ++ name ++ ":=\n" ++ appliednr2 ++ ".\niknows(" ++ stepname ++ (show (n+3)) ++ name ++ ")\n\n" ++ (ruleIF xs (nextnrnm n name)) -- TODO: make sure the name is app or ch based on the protocol!
+   in init ++ (ruleIF (firstRuleSplitApp rules isappprot) (0,"a"))
 
-firstRuleSplitApp :: [Rule] -> [Rule]
+firstRuleSplitApp :: [Rule] -> Bool -> [Rule]
 -- firstRuleSplitApp rules | trace ("firstRuleSplitApp\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
-firstRuleSplitApp rules = 
+firstRuleSplitApp rules False = rules
+firstRuleSplitApp rules True= 
   let (l,eq,eqid,r) = head rules 
       append a [] = [a]
       append a (x:xs) = x:append a xs

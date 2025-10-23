@@ -26,8 +26,8 @@ import ProtocolTranslationTypes
 import VertTranslator
 
 mkIF :: Protocol -> AnBOptsAndPars -> String
-mkIF (protocol@(_, typdec, knowledge, _, _, _)) args =
-  ( if (vert args) then (\x -> x ++ vertendstr (noowngoal args)). vertruleList (if2cif args).vertaddInit.vertcreateRules.vertformats else
+mkIF (protocol@(_, typdec, knowledge, _, actions, _)) args =
+  ( if (vert args) then (\x -> x ++ vertendstr (noowngoal args)). vertruleList (if2cif args) (isAppProtocol actions).vertaddInit.vertcreateRules (isAppProtocol actions).vertformats else
   ( if (outt args) == IF
         then (\x -> x ++ endstr (noowngoal args)) . ruleList (if2cif args)
         else
@@ -41,6 +41,13 @@ mkIF (protocol@(_, typdec, knowledge, _, _, _)) args =
       . createRules
       . formats)
     (mkPTS protocol args)
+
+isAppProtocol :: Actions -> Bool
+isAppProtocol []     = False
+isAppProtocol (a:as) = let ((_,channeltype,_),_,_,_) = a 
+                       in case channeltype of 
+                          ChannelProtocol -> True
+                          _               ->  isAppProtocol as
 
 newanbmain inputstr otp =
   (mkIF (anbparser (alexScanTokens inputstr)) otp)
