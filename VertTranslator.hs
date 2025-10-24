@@ -12,24 +12,24 @@ Open Source Fixedpoint Model-Checker version 2024
 All Rights Reserved.
 
 -}
---Alexander Laukamp created this file, though most things are taken from Translator.hs
+-- Alexander Laukamp created this file, though most things are taken from Translator.hs
 
 module VertTranslator where
 
 import AnBOnP
 import Ast
 import Control.Monad
+import Data.Array (elems)
 import Data.List
 import Data.Maybe
-import Data.Text(pack,unpack,replace)
+import Data.Text (pack, replace, unpack)
+import Debug.Trace
 import LMsg
+import LMsg (LMsg)
 import Msg
 import MsgPat
 import PaoloTranslator
 import ProtocolTranslationTypes
-import LMsg (LMsg)
-import Debug.Trace
-import Data.Array (elems)
 
 vertformats :: ProtocolTranslationState -> ProtocolTranslationState
 vertformats pts =
@@ -85,7 +85,7 @@ fAct formats ((sp@(sender, b1, Nothing), Secure, rp@(receiver, b2, Nothing)), m,
        in (((sender, False, Nothing), Insecure, (receiver, False, Nothing)), fMsg formats m', Nothing, Nothing)
 fAct formats ((sp@(sender, False, Nothing), ChannelProtocol, rp@(receiver, False, Nothing)), m, Nothing, Nothing) =
   ((sp, Insecure, rp), fMsg formats m, Nothing, Nothing)
-fAct formats ((sp@(_,_,_),ChannelProtocol,_),_,_,_) = error "Wtf? unaccounted channel protcol error encountered: -Ch-> cannot be used like this!"
+fAct formats ((sp@(_, _, _), ChannelProtocol, _), _, _, _) = error "Wtf? unaccounted channel protcol error encountered: -Ch-> cannot be used like this!"
 fAct formats ((sp@(sender, b1, Just _), _, _), _, _, _) = error "Explicit pseudonyms not supported right now."
 fAct formats ((_, _, rp@(receiver, b2, Just _)), _, _, _) = error "Explicit pseudonyms not supported right now."
 -- (fChan formats channel,fMsg formats m,Nothing,Nothing)
@@ -199,27 +199,29 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot
             let state1' = peertrafo receiver msg1 state1
                 st = sendMsgAnyway sndm (state1' ++ (map (\x -> (Atom x, Atom x)) fresh) ++ (map (\x -> (Comp Inv [Atom x], Comp Inv [Atom x])) freshpks))
              in (st, chtrafo True sender ct receiver (snd (last st)))
-      firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"],Atom "globalcounter"] -- TODO: make sure c and T are unique!
+      firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"], Atom "globalcounter"] -- TODO: make sure c and T are unique!
       secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
       msgstruct msg = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]]] else [Iknows msg] -- is removed from app3b in ruleSplit later --TODO: Make sure to get s & C's role names from knowledge!
       incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1
-      outgoingmsg  = if msg2 == (Atom "i") then [] else msgstruct msg2
+      outgoingmsg = if msg2 == (Atom "i") then [] else msgstruct msg2
 
-      sentappfact = Fact "contains" [Atom "N", Comp Apply [Atom "sent", Comp Cat [Atom "s", Atom "C"]]] --TODO: Make sure to get N, s, and C's names from knowledge!
-      sentchfact  = Fact "TEMP" [] 
+      sentappfact = Fact "contains" [Atom "N", Comp Apply [Atom "sent", Comp Cat [Atom "s", Atom "C"]]] -- TODO: Make sure to get N, s, and C's names from knowledge!
+      sentchfact = Fact "TEMP" []
       sentfact = if isappprot then sentappfact else sentchfact
 
-      firstfactlist = if step == totalnrsteps 
-                      then firstfact : sentfact : incommingmsg 
-                      else firstfact : incommingmsg
-      secondfactlist = if step == 0 || not isappprot
-                       then secondfact : sentfact : outgoingmsg
-                       else secondfact : outgoingmsg
+      firstfactlist =
+        if step == totalnrsteps
+          then firstfact : sentfact : incommingmsg
+          else firstfact : incommingmsg
+      secondfactlist =
+        if step == 0 || not isappprot
+          then secondfact : sentfact : outgoingmsg
+          else secondfact : outgoingmsg
    in ( ( ( State
               role
               ( ( (nubBy eqSnd)
+                    -- . (\x -> (Atom "SID", Atom "SID") : (x ++ [(Atom "0", Atom "0")]))
                     . (\x -> (Atom role, Atom role) : (x ++ [(Atom "SID", Atom "SID")]))
-                    . (take (length state))
                 )
                   state1
               )
@@ -229,7 +231,12 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot
           fresh,
           ( State
               role
-              (((nubBy eqSnd) . (\x -> (Atom role, Atom role) : (x ++ [(Atom "SID", Atom "SID")]))) state1)
+              ( ( (nubBy eqSnd)
+                    -- . (\x -> (Atom "SID", Atom "SID") : (x ++ [(Atom "0", Atom "0")]))
+                    . (\x -> (Atom role, Atom role) : (x ++ [(Atom "SID", Atom "SID")]))
+                )
+                  state1
+              )
           )
             : (secondfactlist)
         ),
@@ -239,7 +246,7 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot
 sendMsgAnyway :: Msg -> ProtocolState -> ProtocolState
 sendMsgAnyway msg state =
   case synthesisPattern state msg of
-    Nothing ->state ++ [(msg, msg)] -- i have no idea what I'm doing
+    Nothing -> state ++ [(msg, msg)] -- i have no idea what I'm doing
     Just p -> state ++ [(msg, p)]
 
 eqSnd (_, a) (_, b) = a == b
@@ -298,7 +305,7 @@ chtrafo _ _ _ _ _ = error "This can't be happening!"
 {- Long comment was here in Translator.hs - I removed it from here-}
 
 peertrafo :: Peer -> Msg -> ProtocolState -> ProtocolState
-peertrafo (receiver, ispseudo, Just nym) inmsg protostate = 
+peertrafo (receiver, ispseudo, Just nym) inmsg protostate =
   protostate ++ [(nym, nym)]
 -- error "Not yet implemented: alternative pseudos in protocol."
 peertrafo (receiver, ispseudo, Nothing) inmsg protostate =
@@ -349,11 +356,28 @@ lookupL :: Ident -> Knowledge -> [Msg]
 lookupL x ([], _) = error ("Initial knowledge of role " ++ (show x) ++ " not specified.")
 lookupL x (((y, k) : ys), ineq) = if x == y then k else lookupL x (ys, ineq)
 
+----- Translation Stage 2: add steps
+------------------------------------
+
+vertrulesAddSteps :: ProtocolTranslationState -> ProtocolTranslationState
+vertrulesAddSteps pts =
+  let counter inc (State role (player : ids)) (facts, db) =
+        ( (State role (player : (((\x -> (x, x)) . Atom . show) (db role)) : ids)) : facts,
+          \x -> if x == role then (db role) else db x
+        )
+      counter inc fact (facts, db) = (fact : facts, db)
+      adds [] db = []
+      adds ((l, [], f, r) : xs) db =
+        let (l', db') = foldr (counter 1) ([], db) l
+            (r', db'') = foldr (counter 0) ([], db') r
+         in (l', [], f, r') : (adds xs db'')
+   in pts {rules = adds (rules pts) (\x -> 0)}
+
 --- Stage 4: Adding the initial state
 -------------------------------------
 
-vertaddInit :: ProtocolTranslationState -> ProtocolTranslationState
-vertaddInit pts =
+vertaddInit :: Bool -> ProtocolTranslationState -> ProtocolTranslationState
+vertaddInit isappprot pts =
   let (_, typdec, knowledge, _, _, _) = protocol pts
       args = options pts
       absInit = getinitials (rules pts) knowledge
@@ -370,6 +394,9 @@ vertaddInit pts =
           ++ ik0
           ++ (getCrypto agents0)
       agents = ((++) ["i", "A", "B"]) agents0
+      addedtypes = if isappprot then printTypes [(Function, ["sent", "secCh"])] else printTypes [(Set, ["opened", "closed"])] ++ printTypes [(Function, ["secCh"])] -- TODO: make names protected?
+      addedcounter = "contains(apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,0))))))),globalcounter).\n" -- TODO: Make sure it contains as many steps as specified (somewhere)!
+      addeddummy = if isappprot then "" else "state_dummy(dummy,1,0).\n"
    in pts
         { initial =
             ( if typed args
@@ -378,8 +405,7 @@ vertaddInit pts =
                       ++ (ppIdList agents)
                       ++ ":agent\n"
                       ++ (printTypes typdec)
-                      ++ (printTypes [(Function, ["sent","secCh"])]) -- only have this if App protocol!!! -- Should i make them protected keywords like "secret" is?
-                      -- ++ (printTypes [(Set, ["opened","closed"])]) -- only have this if Ch protocol
+                      ++ addedtypes
                       ++ (printTypes [(Function, ["c"])])
                       ++ (printTypes [(Set, ["globalcounter"])])
                       ++ "\n"
@@ -388,7 +414,8 @@ vertaddInit pts =
             )
               ++ "section inits:\n"
               ++ " initial_state init1 :=\n"
-              ++ "contains(apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,0))))))),globalcounter).\n" -- TODO: Make sure it contains as many steps as specified (somewhere)! 
+              ++ addedcounter
+              ++ addeddummy
               ++ (ppFactList IF facts)
               ++ (concatMap (\x -> " & " ++ (ppId x) ++ "/=i") honest)
               ++
@@ -547,71 +574,77 @@ vertruleList if2cif isappprot pts =
 ruleListIF :: (String, [Rule]) -> [Ident] -> Bool -> Bool -> String
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ init ++ "\n" ++ foldr (\a s ->(ppRule IF a ++"\n") ++s ) ""  rules) False = undefined
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ foldr (\a s ->show a ++ (ppRule IF a ++"\n") ++s ) ""  rules) False = undefined -- debug for --vert
-ruleListIF (init, rules) sqns if2cif isappprot=
-  let ruleIF [] _ = ""
-      ruleIF (x : xs) (n,name) =
+ruleListIF (init, rules) sqns if2cif isappprot =
+  let ruleIF [] _ _ = ""
+      ruleIF (x : xs) (n, name) lastrulenr =
         let -- rule hacked SQN
             nr1 = ppRuleIFHack x sqns
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
-            nextnrnm nr nm = if nm == "a" then (nr,"b") else if isappprot then ((nr+1),"") else ((nr+1),"a")
+            nextnrnm nr nm = if nm == "a" then (nr, "b") else if isappprot then ((nr + 1), "") else ((nr + 1), "a")
             appliednr2 = if name == "b" then (unpack . Data.Text.replace (pack ",C") (pack ",i") . pack) (ppRule IF nr2) else ppRule IF nr2
             stepname = if isappprot then "app" else "ch"
-            iknowspart = if isappprot then ".\niknows(" ++ stepname ++ (show (n+3)) ++ name ++ ")\n\n" else "\n\n"
-         in "step " ++ stepname ++ (show (n+3)) ++ name ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name)) -- TODO: make sure the name is app or ch based on the protocol!
-   in init ++ (ruleIF (ruleSplit rules isappprot) (0,"a"))
+            rulenr = n + 3
+            stepandnr = "step " ++ stepname ++ (show rulenr) ++ name
+            iknowspart = if isappprot then ".\niknows(" ++ stepname ++ (show rulenr) ++ name ++ ")\n\n" else "\n\n"
+         in stepandnr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr) -- TODO: make sure the name is app or ch based on the protocol!
+   in init ++ (ruleIF (ruleSplit rules isappprot) (0, "a") (getlastrulenr rules))
+
+getlastrulenr rules = length rules + 3
 
 ruleSplit :: [Rule] -> Bool -> [Rule]
 -- ruleSplit rules | trace ("ruleSplit\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
-ruleSplit rules False = -- ch
-  let (l,eq,eqid,r) = head rules
-      payloadident = head eqid 
+ruleSplit rules False =
+  -- ch
+  let (l, eq, eqid, r) = head rules
+      payloadident = head eqid
       append a [] = [a]
-      append a (x:xs) = x:append a xs
+      append a (x : xs) = x : append a xs
       l1 = append (Fact "contains" [Atom payloadident, Atom "opened"]) l
       l2 = append (Fact "contains" [Atom payloadident, Atom "closed"]) l
       lastelem [] = error "ruleSplit: cannot use internal function 'lastelem' on empty list!"
-      lastelem (elem:[]) = elem
-      lastelem (x:xs) = lastelem xs
+      lastelem (elem : []) = elem
+      lastelem (x : xs) = lastelem xs
       msg = case lastelem r of
-            Iknows x -> x
-            _        -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
+        Iknows x -> x
+        _ -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
       replacetemp [] _ = error "ruleSplit: cannot use internal function 'replacetemp' on empty list!"
-      replacetemp (x:xs) [e1,e2] = case x of 
-                                Fact "TEMP" _ -> e1 : e2 : xs
-                                _               -> x : replacetemp xs [e1,e2]
+      replacetemp (x : xs) [e1, e2] = case x of
+        Fact "TEMP" _ -> e1 : e2 : xs
+        _ -> x : replacetemp xs [e1, e2]
       replacetemp _ _ = error "ruleSplit: cannot use internal function 'replacetemp' with elem list of length other than 2!"
-      secchfact = Fact "contains" [Atom payloadident,Comp Apply [Atom "secCh",Comp Cat [Atom "A", Atom "B"]]] --TODO: Grab A and B from knowledge s.t. it is not hard-coded!!!
-      chopenedpart = [Fact "contains" [Atom payloadident, Atom "opened"],secchfact]
-      chclosedpart = [Fact "contains" [Atom payloadident, Atom "closed"],secchfact]
+      secchfact = Fact "contains" [Atom payloadident, Comp Apply [Atom "secCh", Comp Cat [Atom "A", Atom "B"]]] -- TODO: Grab A and B from knowledge s.t. it is not hard-coded!!!
+      chopenedpart = [Fact "contains" [Atom payloadident, Atom "opened"], secchfact]
+      chclosedpart = [Fact "contains" [Atom payloadident, Atom "closed"], secchfact]
       r1 = replacetemp r chopenedpart
       r2 = replacetemp r chclosedpart
 
-      (l',eq',equid',r') = head (tail rules)
+      (l', eq', equid', r') = head (tail rules)
       iknowspart = lastelem l'
       l3 = replacetemp l' chopenedpart
       l4 = replacetemp l' chclosedpart
       r'' = (append iknowspart r')
       r3 = replacetemp r'' chopenedpart
       r4 = replacetemp r'' chclosedpart
-  in [(l1,eq,[],r1),(l2,eq,[],r2),(l3,eq',equid',r3),(l4,eq',equid',r4)]
-ruleSplit rules True= -- app
-  let (l,eq,eqid,r) = head rules 
+   in [(l1, eq, [], r1), (l2, eq, [], r2), (l3, eq', equid', r3), (l4, eq', equid', r4)]
+ruleSplit rules True =
+  -- app
+  let (l, eq, eqid, r) = head rules
       append a [] = [a]
-      append a (x:xs) = x:append a xs
+      append a (x : xs) = x : append a xs
       l1 = append (Fact "&" [Comp Neq [Atom "C", Atom "i"]]) l -- TODO: Grab C from knowledge s.t. it is not hard-coded!!!
       lastelem [] = error "ruleSplit: cannot use internal function 'lastelem' on empty list!"
-      lastelem (elem:[]) = elem
-      lastelem (x:xs) = lastelem xs
+      lastelem (elem : []) = elem
+      lastelem (x : xs) = lastelem xs
       msg = case lastelem r of
-            Fact "contains" [x,y] -> x
-            _                     -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
+        Fact "contains" [x, y] -> x
+        _ -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
       replacelastelem rep [] = error "ruleSplit: cannot use internal function 'replacelastelem' on empty list!"
-      replacelastelem rep (elem:[]) = rep:[]
-      replacelastelem rep (x:xs) = x:replacelastelem rep xs
+      replacelastelem rep (elem : []) = rep : []
+      replacelastelem rep (x : xs) = x : replacelastelem rep xs
       newfact = Iknows msg
       r2 = replacelastelem newfact r
-  in (l1,eq,eqid,r) : (l,eq,eqid,r2) : tail rules
+   in (l1, eq, eqid, r) : (l, eq, eqid, r2) : tail rules
 
 ppRuleIF2CIF :: Rule -> Rule
 -- ppRuleIF2CIF r | trace ("ppRuleIF2CIF\n\tr: " ++ ppRule IF r) False = undefined

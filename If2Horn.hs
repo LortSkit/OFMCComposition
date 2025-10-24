@@ -23,9 +23,9 @@ import FPTranslator
 import Msg
 import NewIfLexer
 import NewIfParser
-import Translator
 import PaoloTranslator
 import ProtocolTranslationTypes
+import Translator
 
 if2horn :: PProt -> HornRep
 if2horn = if2horn0 (HR {initialH = [], absrulesH = [], rulesH = [], typesH = []})

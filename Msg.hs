@@ -12,60 +12,101 @@ Open Source Fixedpoint Model-Checker version 2024
 All Rights Reserved.
 
 -}
+-- | This module defines the @Msg@ data type for the AnB translators and several functions for it.
+module Msg
+  ( Ident,
+    Operator (..),
+    Msg (..),
+    Theory,
+    idents,
+    isConstant,
+    isAtom,
+    isVariable,
+    vars,
+    isCat,
+    foldMsg,
+    addSub,
+    Substitution,
+    eqMod,
+    eqModBound,
+    (===),
+    catty,
+    deCat,
+    stdTheo,
+    synthesizable,
+    analysis,
+    indy,
+    normalizeXor,
+    ppId,
+    ppIdList,
+    ppMsg,
+    ppMsgList,
+    ppMsgListAnds,
+    ppXList,
+    match0,
+    isAtype,
+    isntFunction,
+  )
+where
 
--- | This module defines the @Msg@ data type for the AnB translators and several functions for it. 
-module Msg(Ident,Operator(..),Msg(..),Theory,
-           idents,isConstant,isAtom,isVariable,vars,isCat,foldMsg,
-	   addSub,Substitution,
-	   eqMod,eqModBound,(===),catty,deCat,stdTheo,
-	   synthesizable,analysis,indy,
-	   normalizeXor,
-	   ppId,ppIdList,ppMsg,ppMsgList,ppMsgListAnds,ppXList,match0,isAtype,isntFunction)  where
 import AnBOnP
+import Control.Monad.Trans.State (State, evalState, get, put)
 import Data.List
 import Data.Maybe
-import Control.Monad.Trans.State (State,get,put,evalState)
 
 -- | this is an internal constant to control the number of algebraic reasoning steps that the translator will use.
-eqModBound = 3 
+eqModBound = 3
 
-type Ident = String -- ^ this type is used for all symbols (constants, variables, functions, facts).
+type Ident =
+  -- | this type is used for all symbols (constants, variables, functions, facts).
+  String
 
 -- | Type for operators (function symbols) in message terms.
-data Operator = 
-       Crypt -- ^ asymmetric encryption
-       | Scrypt -- ^ symmetric encryption 
-       | Cat -- ^ concatenation---may be soon exchanged for family of n-tuples (n in Nat)  
-       | Inv -- ^ private key of a given public key -- we plan to introduce a distinction between these mappings and other operators
-       | Exp -- ^ modular exponentation
-       | Xor -- ^ bitwise exclusive OR 
-       | Apply -- ^ function application, e.g. @Apply(f,x)@ for @f(x)@ is old AVISPA IF standard for user defined functions, aka 1.5th-order logic! 
-       | Userdef Ident -- ^ user-defined function symbols, may replace the above @Apply@ eventually.
-       | Pseudonym
-       | AuthChan
-       | ConfChan
-       | Neq -- only for use with --vert flag!
-       deriving (Eq,Show)
+data Operator
+  = -- | asymmetric encryption
+    Crypt
+  | -- | symmetric encryption
+    Scrypt
+  | -- | concatenation---may be soon exchanged for family of n-tuples (n in Nat)
+    Cat
+  | -- | private key of a given public key -- we plan to introduce a distinction between these mappings and other operators
+    Inv
+  | -- | modular exponentation
+    Exp
+  | -- | bitwise exclusive OR
+    Xor
+  | -- | function application, e.g. @Apply(f,x)@ for @f(x)@ is old AVISPA IF standard for user defined functions, aka 1.5th-order logic!
+    Apply
+  | -- | user-defined function symbols, may replace the above @Apply@ eventually.
+    Userdef Ident
+  | Pseudonym
+  | AuthChan
+  | ConfChan
+  | Neq -- only for use with --vert flag!
+  deriving (Eq, Show)
 
 -- | THE main data type...
-data Msg = Atom Ident -- ^ Atomic terms, i.e. a constant (lower-case) or a variable (upper-case)
-         | Comp Operator [Msg] -- ^ Composed term with an operator and a list of subterms
-	 deriving Show
+data Msg
+  = -- | Atomic terms, i.e. a constant (lower-case) or a variable (upper-case)
+    Atom Ident
+  | -- | Composed term with an operator and a list of subterms
+    Comp Operator [Msg]
+  deriving (Show)
 
--- | Type to identify the position of a subterm with in a term, e.g. the @y@ in @f(g(x,y),z)@ has position @[0,1]@. 
+-- | Type to identify the position of a subterm with in a term, e.g. the @y@ in @f(g(x,y),z)@ has position @[0,1]@.
 type Position = [Int]
 
--- | Substitutions when already extended to a homomorphism on @Msg@ 
+-- | Substitutions when already extended to a homomorphism on @Msg@
 type Substitution = Msg -> Msg
 
 -- | Equational theory as a set of pairs of messages that are supposed to be equal
-type Theory = [(Msg,Msg)]
+type Theory = [(Msg, Msg)]
 
 -- | The message type belongs to class @Eq@: so @==@ is defined on
--- @Msg@, namely as equivalence modulo via at most @eqModBound@ applications of an equivalence in 
+-- @Msg@, namely as equivalence modulo via at most @eqModBound@ applications of an equivalence in
 -- @stdTheo@.
 instance Eq Msg where
- a==b = a===b || elemBy (===) a (eqMod eqModBound stdTheo [b])
+  a == b = a === b || elemBy (===) a (eqMod eqModBound stdTheo [b])
 
 -- | A folding operation on messages (one functor for atomic and one for composed terms)
 foldMsg :: (Ident -> a) -> (Operator -> [a] -> a) -> Msg -> a
@@ -73,17 +114,18 @@ foldMsg f g (Atom a) = f a
 foldMsg f g (Comp h xs) = g h (map (foldMsg f g) xs)
 
 -- | Identifiers (constants and variables) occuring in a given message
-idents     :: Msg -> [Ident]
+idents :: Msg -> [Ident]
 isConstant :: Ident -> Bool
 isVariable :: Ident -> Bool
-
 isAtom :: Msg -> Bool
 isAtom (Atom _) = True
 isAtom _ = False
+idents = foldMsg return (\x -> concat)
 
-idents       = foldMsg return (\x->concat)
-isConstant x = elem (head x) ['a'..'z']
-isVariable x = elem (head x) ['A'..'Z']
+isConstant x = elem (head x) ['a' .. 'z']
+
+isVariable x = elem (head x) ['A' .. 'Z']
+
 isCat (Comp Cat _) = True
 isCat _ = False
 
@@ -95,62 +137,77 @@ elemBy eq a = any (eq a)
 
 -- | syntactic equivalence on @Msg@
 (===) :: Msg -> Msg -> Bool
-(Atom ident)===(Atom ident') = ident==ident'
-(Comp f xs)===(Comp g ys) = (f==g) && (all (\(x,y)->x===y) (zipInsist xs ys))
-_===_ = False
+(Atom ident) === (Atom ident') = ident == ident'
+(Comp f xs) === (Comp g ys) = (f == g) && (all (\(x, y) -> x === y) (zipInsist xs ys))
+_ === _ = False
 
 --- Algebraic equations ----
 
 thA = Atom "TheoA"
+
 thB = Atom "TheoB"
+
 thC = Atom "TheoC"
+
 thX = Atom "TheoX"
+
 thY = Atom "TheoY"
 
+stdAlgOps = [Exp, Xor]
 
-stdAlgOps = [Exp,Xor]
+stdEqs =
+  [ --- (A^X)^Y = (A^Y)^X
+    ( aexp (aexp thA thX) thY,
+      aexp (aexp thA thY) thX
+    ),
+    --- A xor B = B xor A
+    ( axor thA thB,
+      axor thB thA
+    ),
+    --- A xor (B xor C) = (A xor B) xor C
+    ( axor thA (axor thB thC),
+      axor (axor thA thB) thC
+    )
+  ]
 
-stdEqs = [--- (A^X)^Y = (A^Y)^X
-          (aexp (aexp thA thX) thY,
-	   aexp (aexp thA thY) thX),
-	  --- A xor B = B xor A
-	  (axor thA thB, 
-	   axor thB thA),
-	  --- A xor (B xor C) = (A xor B) xor C
-	  (axor thA (axor thB thC),
-	   axor (axor thA thB) thC)]
+aexp a b = Comp Exp [a, b]
 
-aexp a b = Comp Exp [a,b] 
-axor a b = Comp Xor [a,b] 
+axor a b = Comp Xor [a, b]
 
 -- | standard equational theory for @exp@ and @xor@
-stdTheo = stdEqs++[(r,l) | (l,r) <- stdEqs]
+stdTheo = stdEqs ++ [(r, l) | (l, r) <- stdEqs]
 
 --- internal function -- | equivalence modulo one application of a rule of a theory
 eqModOne :: Theory -> [Msg] -> [Msg]
 eqModOne theo msgs =
-  Data.List.nubBy (===)
-      (msgs++
-       (maxLength 10
-       [ replace msg pos (sigma r)
-       | (l,r) <- theo, msg <- msgs, (sigma,pos) <- matchAllPos l msg]))
+  Data.List.nubBy
+    (===)
+    ( msgs
+        ++ ( maxLength
+               10
+               [ replace msg pos (sigma r)
+                 | (l, r) <- theo,
+                   msg <- msgs,
+                   (sigma, pos) <- matchAllPos l msg
+               ]
+           )
+    )
 
-maxLength 0 l = error ("Length exceeded: "++(show (take 10 l)))
+maxLength 0 l = error ("Length exceeded: " ++ (show (take 10 l)))
 maxLength _ [] = []
-maxLength n (x:xs) = x:(maxLength n xs)
+maxLength n (x : xs) = x : (maxLength n xs)
 
 -- | equivalence modulo a given number of applications of rules of a theory
 eqMod :: Int -> Theory -> [Msg] -> [Msg]
 eqMod 0 theo msgs = msgs
-eqMod n theo msgs = eqMod (n-1) theo (eqModOne theo msgs)
+eqMod n theo msgs = eqMod (n - 1) theo (eqModOne theo msgs)
 
-
---- internal function -- | @replace m p m'@  replaces in message @m@ the subterm at position @p@ with @m'@. 
+--- internal function -- | @replace m p m'@  replaces in message @m@ the subterm at position @p@ with @m'@.
 replace :: Msg -> Position -> Msg -> Msg
 replace msg [] msg' = msg'
-replace (Comp f xs) (i:pos) msg' =
-  let (pre,(x:post)) = splitAt i xs in
-  Comp f (pre++[replace x pos msg']++post) 
+replace (Comp f xs) (i : pos) msg' =
+  let (pre, (x : post)) = splitAt i xs
+   in Comp f (pre ++ [replace x pos msg'] ++ post)
 
 {-
 --- internal function -- | all valid position in a @Msg@
@@ -159,32 +216,32 @@ positions = foldMsg (\x -> [[]])
 		    (\_ xs-> []:[i:p| (i,x) <- zip [0..] xs, p<-x])
 -}
 
-
---- internal function -- | positions where algebraic properties can be applied 
+--- internal function -- | positions where algebraic properties can be applied
 positionsAlg :: Msg -> [Position]
 positionsAlg (Atom x) = []
-positionsAlg (Comp f xs) = 
- (if f `elem` stdAlgOps then [[]] else [])++
- [i:p|(i,x) <- zip [0..] xs, p<-positionsAlg x]
+positionsAlg (Comp f xs) =
+  (if f `elem` stdAlgOps then [[]] else [])
+    ++ [i : p | (i, x) <- zip [0 ..] xs, p <- positionsAlg x]
 
 --- internal function -- | returns the subterm of a message at a given position
 atPos :: Position -> Msg -> Msg
 atPos [] msg = msg
-atPos (i:p) (Comp f xs) = atPos p (xs !! i)
+atPos (i : p) (Comp f xs) = atPos p (xs !! i)
 
 --- internal function -- | @matchAllPos p m@ find all (algebraic) positions in @m@ that
 -- match @p@
-matchAllPos :: Msg -> Msg -> [(Substitution,Position)]
+matchAllPos :: Msg -> Msg -> [(Substitution, Position)]
 matchAllPos pattern msg =
-  [ (sigma,pos)
-  | pos <- positionsAlg msg, 
-    sigma <- match pattern (atPos pos msg) ]
+  [ (sigma, pos)
+    | pos <- positionsAlg msg,
+      sigma <- match pattern (atPos pos msg)
+  ]
 
 --- internal function -- | normal matching between terms
 match :: Msg -> Msg -> [Substitution]
-match m1 m2 = match0 [(m1,m2)] (\x->x)
---- warning: this is matching in free algebra!
+match m1 m2 = match0 [(m1, m2)] (\x -> x)
 
+--- warning: this is matching in free algebra!
 
 -- | Matching function: takes a list of pairs @(p,m)@ of messages and
 -- an initial substitution @sigma0@. (Typically, this is called with
@@ -192,30 +249,35 @@ match m1 m2 = match0 [(m1,m2)] (\x->x)
 -- does not substitute variables that occur in any pair @(p,m)@. The
 -- procedure computes all substitutions @sigma@ that extend the
 -- initial substitution @sigma0@ such that @p sigma=m@. Warning:
--- variables in @m@ may not be handled correctly, 
-match0 :: [(Msg,Msg)] -> Substitution -> [Substitution]
+-- variables in @m@ may not be handled correctly,
+match0 :: [(Msg, Msg)] -> Substitution -> [Substitution]
 match0 [] sigma = [sigma]
-match0 ((Atom x,Atom y):rest) sigma =
-  if x==y then match0 rest sigma else
-  if isVariable x then 
-    let tau = addSub sigma x (Atom y)
-    in match0 (map (\(m1,m2) -> (tau m1,tau m2)) rest) tau
-  else []
-match0 ((Comp f xs,Comp g ys):rest) sigma =
-  if f==g && (length xs)==(length ys) then
-    match0 ((zipInsist xs ys)++rest) sigma
-  else []
-match0 ((Atom x,m):rest) sigma =
-  if isVariable x then
-    let tau = addSub sigma x m
-    in match0 (map (\(m1,m2) -> (tau m1,tau m2)) rest) tau
-  else []
+match0 ((Atom x, Atom y) : rest) sigma =
+  if x == y
+    then match0 rest sigma
+    else
+      if isVariable x
+        then
+          let tau = addSub sigma x (Atom y)
+           in match0 (map (\(m1, m2) -> (tau m1, tau m2)) rest) tau
+        else []
+match0 ((Comp f xs, Comp g ys) : rest) sigma =
+  if f == g && (length xs) == (length ys)
+    then
+      match0 ((zipInsist xs ys) ++ rest) sigma
+    else []
+match0 ((Atom x, m) : rest) sigma =
+  if isVariable x
+    then
+      let tau = addSub sigma x m
+       in match0 (map (\(m1, m2) -> (tau m1, tau m2)) rest) tau
+    else []
 match0 _ sigma = []
 
-zipInsist :: Show(a) => Show(b) => [a] -> [b] -> [(a,b)]
-zipInsist (x:xs) (y:ys) = (x,y): zipInsist xs ys
+zipInsist :: (Show (a)) => (Show (b)) => [a] -> [b] -> [(a, b)]
+zipInsist (x : xs) (y : ys) = (x, y) : zipInsist xs ys
 zipInsist [] [] = []
-zipInsist l1 l2 = error $ "zip on lists with different lengths. Here they must have the same length, I insist\n l1="++ (show l1) ++ "\n l2=" ++ (show l2)++"\n\nThis error is most likely caused by using a function with different number of arguments in a specification.\n\n"
+zipInsist l1 l2 = error $ "zip on lists with different lengths. Here they must have the same length, I insist\n l1=" ++ (show l1) ++ "\n l2=" ++ (show l2) ++ "\n\nThis error is most likely caused by using a function with different number of arguments in a specification.\n\n"
 
 {-
 -- | for a weakly
@@ -224,7 +286,7 @@ match0T :: [(Msg,Msg)] -> Substitution -> [Substitution]
 match0T [] sigma = [sigma]
 match0T ((Atom x,Atom y):rest) sigma =
   if x==y then match0T rest sigma else
-  if isVariable x then 
+  if isVariable x then
     let tau = addSub sigma x (Atom y)
     in match0T (map (\(m1,m2) -> (tau m1,tau m2)) rest) tau
   else []
@@ -244,14 +306,14 @@ matchEQ0 :: [(Msg,Msg)] -> Substitution -> [Substitution]
 matchEQ0 [] sigma = [sigma]
 matchEQ0 ((Atom x,Atom y):rest) sigma =
   if x==y then matchEQ0 rest sigma else
-  if isVariable x then 
+  if isVariable x then
     let tau = addSub sigma x (Atom y)
     in matchEQ0 (map (\(m1,m2) -> (tau m1,tau m2)) rest) tau
   else []
 matchEQ0 ((a@(Comp f xs),b@(Comp g ys)):rest) sigma =
   if f==g && (length xs)==(length ys) then
    if f==Exp || f==Xor then
-     concatMap (\eqs -> matchEQ0 eqs sigma) 
+     concatMap (\eqs -> matchEQ0 eqs sigma)
      [ (zip xs ys')++rest | Comp _ ys' <- (eqMod eqModBound stdTheo [b])]
    else
     matchEQ0 ((zip xs ys)++rest) sigma
@@ -268,9 +330,10 @@ matchEQ0 _ sigma = []
 -- we assume that x and the variables of t are disjoint from the
 -- domain of sigma and x does not occur in the range of sigma.
 addSub :: Substitution -> Ident -> Msg -> Substitution
-addSub sigma x t = 
-  foldMsg (\ y -> if x==y then t else sigma (Atom y))
-	  (\ f xs -> Comp f xs)
+addSub sigma x t =
+  foldMsg
+    (\y -> if x == y then t else sigma (Atom y))
+    (\f xs -> Comp f xs)
 
 --------------------------------------------------
 --------------------- Ground Dolev-Yao -----------
@@ -281,114 +344,147 @@ addSub sigma x t =
 -- account.
 synthesizable :: [Msg] -> Msg -> Bool
 synthesizable ik m =
- any (synthesizable0 ik) (eqMod eqModBound stdTheo [m])
-
+  any (synthesizable0 ik) (eqMod eqModBound stdTheo [m])
 
 --- internal function
 synthesizable0 :: [Msg] -> Msg -> Bool
 synthesizable0 ik m =
-  if m `elem` ik then True else
-  case m of
-   Atom _             -> False
-   Comp Inv _         -> False
-   Comp Pseudonym _   -> False
-   Comp AuthChan _    -> True
-   Comp ConfChan _    -> True
-   Comp Neq _         -> True -- only for use with --vert flag!
-   Comp (Userdef _) _ -> error ("Not yet supported: "++(show m))
-   Comp Xor list      -> 
-     (all (synthesizable ik) list) ||
-     (any (\(Comp Xor list')-> list'==list) 
-          [normalizeXor (Comp Xor (l1++l2))
-	  |Comp Xor l1<-ik, 
-     	   Comp Xor l2<-ik, l1/=l2])
-   Comp _ ms          -> all (synthesizable ik) ms
+  if m `elem` ik
+    then True
+    else case m of
+      Atom _ -> False
+      Comp Inv _ -> False
+      Comp Pseudonym _ -> False
+      Comp AuthChan _ -> True
+      Comp ConfChan _ -> True
+      Comp Neq _ -> True -- only for use with --vert flag!
+      Comp (Userdef _) _ -> error ("Not yet supported: " ++ (show m))
+      Comp Xor list ->
+        (all (synthesizable ik) list)
+          || ( any
+                 (\(Comp Xor list') -> list' == list)
+                 [ normalizeXor (Comp Xor (l1 ++ l2))
+                   | Comp Xor l1 <- ik,
+                     Comp Xor l2 <- ik,
+                     l1 /= l2
+                 ]
+             )
+      Comp _ ms -> all (synthesizable ik) ms
 
-data AnalysisState = AnaSt { new  :: [Msg],
-			     test :: [Msg],
-			     done :: [Msg] }
+data AnalysisState = AnaSt
+  { new :: [Msg],
+    test :: [Msg],
+    done :: [Msg]
+  }
 
-initAna ik = AnaSt { new=ik,test=[],done=[] }
+initAna ik = AnaSt {new = ik, test = [], done = []}
 
 type AnaM a = State AnalysisState a
 
-top     = do st <- get
-	     (return . head . new) st
-getik   = do st <- get
-	     return (nub ((new st) ++ (done st) ++ (test st)))
-pop     = do st <- get
-	     put (st {new  = tail (new st), done = (head (new st)):(done st)})
-delay   = do st <- get
-	     put (st {new  = tail (new st), test = (head (new st)):(test st)})
-push ms = do pop
-	     st <- get
-	     put (st {new = ms++(new st)++(test st),test = []})
-pushMore ms 
-        = do st <- get
-	     put (st {new = nub (ms++(new st)++(test st)),test = []})
-isEmpty = do st <- get
-	     return (null (new st))
+top = do
+  st <- get
+  (return . head . new) st
 
-analysis0 = 
-  do b <- isEmpty
-     (if b then getik else 
-      do x <- top
-         ik <- getik
-         (case x of
-          Atom _ -> pop
-          Comp Crypt [Comp Inv [k],p] ->
-            if synthesizable (ik\\[x]) p then pop else
-            if synthesizable (ik\\[x]) k then push [p] else delay
-          Comp Crypt [k,p] -> 
-            if synthesizable (ik\\[x]) p then pop else
-            if synthesizable (ik\\[x]) (Comp Inv [k]) then push [p] else delay
-          Comp Scrypt [k,p] -> 
-            if synthesizable (ik\\[x]) p then pop else
-            if synthesizable (ik\\[x]) k then push [p] else delay
-          Comp Cat ms  -> push ms
-          Comp Inv   _ -> pop
-          Comp Apply _ -> pop
-          Comp Exp   _ -> pop
-          Comp Pseudonym _ -> pop
-          Comp AuthChan _ -> pop
-          Comp ConfChan _ -> pop
-          Comp Neq      _ -> pop
-	  Comp Xor ms -> 
-	   if (length ik)>200 then
-	    error ("Exceeding length...: "++((show ms)++"\n"++(show (getallXors ms (ik\\[x])))++"\n"++(show ik)))
-	   else
-	    let new = (getallXors ms (ik\\[x]))\\ik in
-	    if null new then do delay else do pushMore new
-          _ -> error ("Analysis: Not yet supported: "++(show x)))
-	 analysis0)
+getik = do
+  st <- get
+  return (nub ((new st) ++ (done st) ++ (test st)))
 
---- compute which of the components can be generated and 
+pop = do
+  st <- get
+  put (st {new = tail (new st), done = (head (new st)) : (done st)})
+
+delay = do
+  st <- get
+  put (st {new = tail (new st), test = (head (new st)) : (test st)})
+
+push ms = do
+  pop
+  st <- get
+  put (st {new = ms ++ (new st) ++ (test st), test = []})
+
+pushMore ms =
+  do
+    st <- get
+    put (st {new = nub (ms ++ (new st) ++ (test st)), test = []})
+
+isEmpty = do
+  st <- get
+  return (null (new st))
+
+analysis0 =
+  do
+    b <- isEmpty
+    ( if b
+        then getik
+        else do
+          x <- top
+          ik <- getik
+          ( case x of
+              Atom _ -> pop
+              Comp Crypt [Comp Inv [k], p] ->
+                if synthesizable (ik \\ [x]) p
+                  then pop
+                  else
+                    if synthesizable (ik \\ [x]) k then push [p] else delay
+              Comp Crypt [k, p] ->
+                if synthesizable (ik \\ [x]) p
+                  then pop
+                  else
+                    if synthesizable (ik \\ [x]) (Comp Inv [k]) then push [p] else delay
+              Comp Scrypt [k, p] ->
+                if synthesizable (ik \\ [x]) p
+                  then pop
+                  else
+                    if synthesizable (ik \\ [x]) k then push [p] else delay
+              Comp Cat ms -> push ms
+              Comp Inv _ -> pop
+              Comp Apply _ -> pop
+              Comp Exp _ -> pop
+              Comp Pseudonym _ -> pop
+              Comp AuthChan _ -> pop
+              Comp ConfChan _ -> pop
+              Comp Neq _ -> pop
+              Comp Xor ms ->
+                if (length ik) > 200
+                  then
+                    error ("Exceeding length...: " ++ ((show ms) ++ "\n" ++ (show (getallXors ms (ik \\ [x]))) ++ "\n" ++ (show ik)))
+                  else
+                    let new = (getallXors ms (ik \\ [x])) \\ ik
+                     in if null new then do delay else do pushMore new
+              _ -> error ("Analysis: Not yet supported: " ++ (show x))
+            )
+          analysis0
+      )
+
+--- compute which of the components can be generated and
 --- also which other XORs have a common component
-getallXors ::  [Msg] -> [Msg] -> [Msg]
-getallXors terms ik = 
-  let terms' = filter (not . (synthesizable ik)) terms in
-  (if (length terms')/=(length terms) then [normalizeXor (Comp Xor terms')] else [])
+getallXors :: [Msg] -> [Msg] -> [Msg]
+getallXors terms ik =
+  let terms' = filter (not . (synthesizable ik)) terms
+   in (if (length terms') /= (length terms) then [normalizeXor (Comp Xor terms')] else [])
 
 -- | Normalize a ground term modulo the cancelation theory for XOR
 -- (i.e. @t XOR t -> e@ and @t XOR e -> t@).
 normalizeXor :: Msg -> Msg
-normalizeXor (Comp f xs) = 
-  let xs'= map normalizeXor xs
-  in case f of
-     Xor -> case getFirstDupRemoved xs [] of
-     	    Nothing -> let xs''= filter ((/=)(Atom "e")) xs'
-	    	       in case xs'' of 
-			  [] -> Atom "e"
-			  [x] -> x 
-			  _ -> Comp Xor xs''
-            Just xs'' -> normalizeXor (Comp Xor xs'')
-     _ -> Comp f xs'
+normalizeXor (Comp f xs) =
+  let xs' = map normalizeXor xs
+   in case f of
+        Xor -> case getFirstDupRemoved xs [] of
+          Nothing ->
+            let xs'' = filter ((/=) (Atom "e")) xs'
+             in case xs'' of
+                  [] -> Atom "e"
+                  [x] -> x
+                  _ -> Comp Xor xs''
+          Just xs'' -> normalizeXor (Comp Xor xs'')
+        _ -> Comp f xs'
 normalizeXor m = m
 
 getFirstDupRemoved [] done = Nothing
-getFirstDupRemoved (x:xs) done = 
-  if x `elem` done then Just (((reverse done)\\[x])++xs)
-  else getFirstDupRemoved xs (x:done)
+getFirstDupRemoved (x : xs) done =
+  if x `elem` done
+    then Just (((reverse done) \\ [x]) ++ xs)
+    else getFirstDupRemoved xs (x : done)
 
 {-
 --- find out whether two lists of terms have a common element
@@ -401,7 +497,7 @@ xorIntersection terms1 terms2 =
 -}
 
 -- | Analysis according to Dolev-Yao: given ground set of messages,
--- compute the closure under analysis steps (pairs are filtered out). 
+-- compute the closure under analysis steps (pairs are filtered out).
 analysis :: [Msg] -> [Msg]
 analysis = (filter (not . isCat)) . (evalState analysis0) . initAna
 
@@ -412,102 +508,116 @@ indy = synthesizable . analysis
 
 ------------ Pretty Printing -----------------------
 
--- | True for an atomic identifier that is a typename. 
-types = ["typeAgent","typeNumber","typePK","typeSK","typeFun","typePurpose","typeFormat"]
+-- | True for an atomic identifier that is a typename.
+types = ["typeAgent", "typeNumber", "typePK", "typeSK", "typeFun", "typePurpose", "typeFormat"]
+
 isAtype (Atom x) = x `elem` types
 isAtype _ = False
 
 -- | False for any term @t=f(...)@ and @f@ is a user-defined function
 -- symbol.
-isntFunction (Comp Apply (Atom "typeFun":_)) = False
+isntFunction (Comp Apply (Atom "typeFun" : _)) = False
 isntFunction _ = True
 
 ot = IF
 
 -- | print identifiers (filter for alpha-numeric characters)
 ppId :: Ident -> String
-ppId = filter (\x -> elem x (['a'..'z']++['A'..'Z']++['0'..'9']))
+ppId = filter (\x -> elem x (['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9']))
 
 -- | print list of identifiers, separated by commata
 ppIdList = ppXList ppId ","
-
 
 hideTypes = True
 
 --- local
 ppagentisa (Atom "i") = "dishonest i"
-ppagentisa (Atom "a") = "honest a" 
-ppagentisa (Atom "b") = "honest b" 
-ppagentisa (Atom a) = if isVariable a then a else error ("Illegal agent name: "++(show a))
-ppagentisa m = error ("Illegal agent name: "++(show m))
+ppagentisa (Atom "a") = "honest a"
+ppagentisa (Atom "b") = "honest b"
+ppagentisa (Atom a) = if isVariable a then a else error ("Illegal agent name: " ++ (show a))
+ppagentisa m = error ("Illegal agent name: " ++ (show m))
 
 -- | print a message
 ppMsg :: OutputType -> Msg -> String
-ppMsg ot (Atom x) = 
-  case ot of 
-  Isa -> if x=="a" then error "UNTYPED agent a" else 
-      	 if x=="b" then error "UNTYPED agent b" else
-  	 if x=="i" then error "UNTYPED agent i" else
-	 if x=="SID" then "(SID sid)" else 
-	 if (length x)==1 && ((head x) `elem` ['0'..'9']) 
-	      then "Step "++x else ppId x
-  _ -> ppId x
-ppMsg ot (Comp f xs) = 
-  case f of 
-  Cat -> case ot of
-	 Pretty -> ppMsgList ot xs
-	 IF -> catty IF xs
-	 Isa -> catty Isa xs
-  Apply -> case ot of 
-	 Pretty -> if (isAtype  (head xs))&& hideTypes  then ppMsgList ot (tail xs)
-	           else (ppMsg ot (head xs))++"("++(ppMsgList ot (tail xs))++")"
-	 IF -> if (isAtype  (head xs))  
-	       then ppMsgList ot (tail xs)
-	       else "apply("++(ppMsgList ot xs)++")"
-         Isa ->  
-	       if (isAtype  (head xs))  
-	       then case (head xs) of
-	             (Atom "typeAgent") -> "Agent ("++(ppagentisa (head (tail xs)))++")"
-		     (Atom "typeNumber") -> "Nonce ("++(ppMsgList ot (tail xs))++")"
-		     (Atom "typeFun") -> ppMsgList ot (tail xs)
-		     (Atom "typeSK") -> "SymKey ("++(ppMsgList ot (tail xs))++")"
-		     (Atom "typePK") -> "PubKey ("++(ppMsgList ot (tail xs))++")"
-		     (Atom "typePurpose") -> "Purpose ("++(ppMsgList ot (tail xs))++")"
-                     (Atom "typeFormat") -> "Format("++(ppMsgList ot (tail xs))++")"
-		     (Atom any) -> error ("Unknown Isa type: "++(any))
-	       else (ppMsg ot (head xs))++"("++(ppMsgList ot (tail xs))++")"
-  Crypt -> case ot of
-         Pretty ->  "{"++(((ppMsg ot) . head . tail) xs)++"}"++(ppMsg ot (head xs))
-	 IF -> "crypt("++(ppMsgList ot xs)++")"
-	 Isa -> "crypt("++(ppMsgList ot xs)++")"
-  Scrypt -> case ot of
-	 Pretty ->  "{|"++(((ppMsg ot) . head . tail) xs)++"|}"++(ppMsg ot (head xs))
-	 IF -> "scrypt("++(ppMsgList ot xs)++")"
-	 Isa -> "scrypt("++(ppMsgList ot xs)++")"
-  Inv -> "inv("++(((ppMsg ot).head) xs)++")"
-  Exp -> "exp("++(((ppMsgList ot)) xs)++")"
-  Xor -> "xor("++(((ppMsgList ot)) xs)++")"
-  -- <paolo> SQN hack
-  Userdef id -> (id) ++"("++(ppMsgList ot xs)++")"
-  -- </paolo> SQN hack
-  -- _ -> (show f)++"("++(ppMsgList ot xs)++")"
-  Pseudonym -> ppMsg ot (Comp Apply (Atom "pseudonym":xs))
-  AuthChan  -> ppMsg ot (Comp Apply (Atom "authChCr":xs))
-  ConfChan  -> ppMsg ot (Comp Apply (Atom "confChCr":xs))
-  -- _ -> error "Forgot to write pretty printer for "++(show f) -- no I actually did not 
-  Neq       -> case length xs of 
-               2 ->
-                case ot of
-                IF     -> let a' = head xs 
-                              b' = head (tail xs)
-                          in  case a' of
-                              Atom ida -> case b' of
-                                          Atom idb -> ida ++ "/=" ++ idb
-                                          _        -> error "Use of neq should only be between two Atoms!"
-                              _        -> error "Use of neq should only be between two Atoms!"
-                Pretty -> error "Idk what i'm doing, but it's part of the --vert flag!"
-                Isa    -> error "Idk what i'm doing, but it's part of the --vert flag!"
-                _      -> error "Neq only works with two elements!"
+ppMsg ot (Atom x) =
+  case ot of
+    Isa ->
+      if x == "a"
+        then error "UNTYPED agent a"
+        else
+          if x == "b"
+            then error "UNTYPED agent b"
+            else
+              if x == "i"
+                then error "UNTYPED agent i"
+                else
+                  if x == "SID"
+                    then "(SID sid)"
+                    else
+                      if (length x) == 1 && ((head x) `elem` ['0' .. '9'])
+                        then "Step " ++ x
+                        else ppId x
+    _ -> ppId x
+ppMsg ot (Comp f xs) =
+  case f of
+    Cat -> case ot of
+      Pretty -> ppMsgList ot xs
+      IF -> catty IF xs
+      Isa -> catty Isa xs
+    Apply -> case ot of
+      Pretty ->
+        if (isAtype (head xs)) && hideTypes
+          then ppMsgList ot (tail xs)
+          else (ppMsg ot (head xs)) ++ "(" ++ (ppMsgList ot (tail xs)) ++ ")"
+      IF ->
+        if (isAtype (head xs))
+          then ppMsgList ot (tail xs)
+          else "apply(" ++ (ppMsgList ot xs) ++ ")"
+      Isa ->
+        if (isAtype (head xs))
+          then case (head xs) of
+            (Atom "typeAgent") -> "Agent (" ++ (ppagentisa (head (tail xs))) ++ ")"
+            (Atom "typeNumber") -> "Nonce (" ++ (ppMsgList ot (tail xs)) ++ ")"
+            (Atom "typeFun") -> ppMsgList ot (tail xs)
+            (Atom "typeSK") -> "SymKey (" ++ (ppMsgList ot (tail xs)) ++ ")"
+            (Atom "typePK") -> "PubKey (" ++ (ppMsgList ot (tail xs)) ++ ")"
+            (Atom "typePurpose") -> "Purpose (" ++ (ppMsgList ot (tail xs)) ++ ")"
+            (Atom "typeFormat") -> "Format(" ++ (ppMsgList ot (tail xs)) ++ ")"
+            (Atom any) -> error ("Unknown Isa type: " ++ (any))
+          else (ppMsg ot (head xs)) ++ "(" ++ (ppMsgList ot (tail xs)) ++ ")"
+    Crypt -> case ot of
+      Pretty -> "{" ++ (((ppMsg ot) . head . tail) xs) ++ "}" ++ (ppMsg ot (head xs))
+      IF -> "crypt(" ++ (ppMsgList ot xs) ++ ")"
+      Isa -> "crypt(" ++ (ppMsgList ot xs) ++ ")"
+    Scrypt -> case ot of
+      Pretty -> "{|" ++ (((ppMsg ot) . head . tail) xs) ++ "|}" ++ (ppMsg ot (head xs))
+      IF -> "scrypt(" ++ (ppMsgList ot xs) ++ ")"
+      Isa -> "scrypt(" ++ (ppMsgList ot xs) ++ ")"
+    Inv -> "inv(" ++ (((ppMsg ot) . head) xs) ++ ")"
+    Exp -> "exp(" ++ (((ppMsgList ot)) xs) ++ ")"
+    Xor -> "xor(" ++ (((ppMsgList ot)) xs) ++ ")"
+    -- <paolo> SQN hack
+    Userdef id -> (id) ++ "(" ++ (ppMsgList ot xs) ++ ")"
+    -- </paolo> SQN hack
+    -- _ -> (show f)++"("++(ppMsgList ot xs)++")"
+    Pseudonym -> ppMsg ot (Comp Apply (Atom "pseudonym" : xs))
+    AuthChan -> ppMsg ot (Comp Apply (Atom "authChCr" : xs))
+    ConfChan -> ppMsg ot (Comp Apply (Atom "confChCr" : xs))
+    -- _ -> error "Forgot to write pretty printer for "++(show f) -- no I actually did not
+    Neq -> case length xs of
+      2 ->
+        case ot of
+          IF ->
+            let a' = head xs
+                b' = head (tail xs)
+             in case a' of
+                  Atom ida -> case b' of
+                    Atom idb -> ida ++ "/=" ++ idb
+                    _ -> error "Use of neq should only be between two Atoms!"
+                  _ -> error "Use of neq should only be between two Atoms!"
+          Pretty -> error "Idk what i'm doing, but it's part of the --vert flag!"
+          Isa -> error "Idk what i'm doing, but it's part of the --vert flag!"
+          _ -> error "Neq only works with two elements!"
 
 -- | remove the Cat-operator from a message (return the list of concatenated messages).
 deCat (Comp Cat ms) = ms
@@ -516,22 +626,22 @@ deCat (Comp Cat ms) = ms
 -- @pair(m1,pair(m2,...,mk))@ using @ppMsg@ for printing messages with
 -- the given output format.
 catty display [] = error "Empty Concatenation"
-catty display [x] = ppMsg  display x
-catty display [x,y] = "pair("++(ppMsg  display x)++","++(ppMsg  display y)++")"
-catty display (x:y:z) = "pair("++(ppMsg  display x)++","++(catty display (y:z))++")"
+catty display [x] = ppMsg display x
+catty display [x, y] = "pair(" ++ (ppMsg display x) ++ "," ++ (ppMsg display y) ++ ")"
+catty display (x : y : z) = "pair(" ++ (ppMsg display x) ++ "," ++ (catty display (y : z)) ++ ")"
 
 -- | print list of messages (comma-separated)
-ppMsgList ot list = 
+ppMsgList ot list =
   case ot of
-  Isa -> ppXList (ppMsg ot) "," (filter firstorder list)
-  _ -> ppXList (ppMsg ot) "," list
+    Isa -> ppXList (ppMsg ot) "," (filter firstorder list)
+    _ -> ppXList (ppMsg ot) "," list
 
-ppMsgListAnds ot list = 
+ppMsgListAnds ot list =
   case ot of
     IF -> ppXList (ppMsg ot) " " (filter firstorder list)
-    _  -> error "& facts only supported in IF!"
+    _ -> error "& facts only supported in IF!"
 
-firstorder (Comp Apply [Atom "typeFun",_]) = False
+firstorder (Comp Apply [Atom "typeFun", _]) = False
 firstorder _ = True
 
 -- | generic printing functional: given a printer for type @alpha@, a
@@ -551,11 +661,9 @@ initlabel list = map (\ (x,i) -> (x,Atom ("X_"++(show i)))) (zip list [1..])
 --------------------------------------------------
 --------------------- Ground Dolev-Yao labelled -----------
 
-
 data LAnalysisState = LAnaSt { lnew  :: [LMsg],
  			       ltest :: [LMsg],
 			       ldone :: [LMsg] }
-
 
 linitAna ik = LAnaSt { lnew=ik,ltest=[],ldone=[] }
 
@@ -584,17 +692,17 @@ patterns sig = let n = (Atom "TD",\x->x) in
 powerset :: [a] -> [[a]]
 powerset [] = [ [] ]
 powerset (x:xs) = let powerxs = powerset xs
-		  in powerxs ++ [ (x:subxs) | subxs <- powerxs ] 
+		  in powerxs ++ [ (x:subxs) | subxs <- powerxs ]
 
 patterns0 :: (Msg,Substitution) -> Signature -> Tree (Msg,Substitution)
-patterns0 (term,subst) sig = 
+patterns0 (term,subst) sig =
   let vars = (filter isVariable) . idents
       vs = vars term
       powervs = (powerset vs) \\ [ [] ]
       replacements v = [ Comp op [Comp Cat [Atom (v++"."++(show i)) | i<-[1..n]]]
 		       | (op,n) <- sig ]
       replacementsVS vs = zip vs ( map replacements vs )
-      mksubVS vs = foldr (\ (v,ts) substSet  -> 
+      mksubVS vs = foldr (\ (v,ts) substSet  ->
                             [ addSub sigma v t | sigma <- substSet, t<-ts ] )
                          [ subst ] (replacementsVS vs)
       nodes = [(sigma term,sigma) | vs <- powervs, sigma <- mksubVS vs]
@@ -617,7 +725,7 @@ coveredby (m,_) (Comp op' [Comp Cat args'],_) =
 
 coveredbySet :: (Msg,Substitution) -> [(Msg,Substitution)] -> Bool
 coveredbySet n =
-  any (coveredby n) 
+  any (coveredby n)
 
 patTreeFilter0 ::  [(Msg,Substitution)] -> Tree (Msg,Substitution) -> Tree (Msg,Substitution)
 patTreeFilter0 list (Node a ts) =
@@ -627,11 +735,10 @@ patTreeFilter0 list (Node a ts) =
 patTreeFilter (Node a ts) = Node a (map (patTreeFilter0 [a]) ts)
 
 bfs :: Tree a -> [a]
-bfs t = bfs0 [t] 
+bfs t = bfs0 [t]
 
 bfs0 [] = []
 bfs0 ((Node a sts):ts) = a:(bfs0 (ts++sts))
-
 
 filtered = process [] (bfs (patterns stdSig))
 
@@ -640,14 +747,11 @@ process seen (x:xs) = (if coveredbySet x seen then [] else [x])++(process (x:see
 (Node _ [mitree]) = patterns stdSig
 filteredtree = processtree [] mitree
 
-processtree seen (Node a ts) = 
+processtree seen (Node a ts) =
   let process seen [] = []
-      process seen ((n@(Node x ss)):ns) = 
+      process seen ((n@(Node x ss)):ns) =
         (if coveredbySet x seen then [] else [n])++(process (x:seen) ns)
   in Node a (map (processtree ((map (\ (Node x _) -> x) ts)++seen)) (process (a:seen) ts))
-
-
-
 
 getnodes :: Tree a -> [a]
 getnodes (Node a list) = map (\ (Node x _) -> x) list

@@ -12,7 +12,7 @@ Open Source Fixedpoint Model-Checker version 2024
 All Rights Reserved.
 
 -}
---Alexander Laukamp created this file, though most things are taken from Translator.hs
+-- Alexander Laukamp created this file, though most things are taken from Translator.hs
 
 module ProtocolTranslationTypes where
 

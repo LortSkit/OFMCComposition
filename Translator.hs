@@ -83,7 +83,7 @@ fAct formats ((sp@(sender, b1, Nothing), Secure, rp@(receiver, b2, Nothing)), m,
               then Comp Cat [senderpk, Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]]
               else Comp Crypt [receiverpk, Comp Crypt [Comp Inv [senderpk], m]]
        in (((sender, False, Nothing), Insecure, (receiver, False, Nothing)), fMsg formats m', Nothing, Nothing)
-fAct formats ((sp@(_,_,_),ChannelProtocol,rp@(_,_,_)),_,_,_) = error "-Ch-> symbol only allowed when using --vert flag!"
+fAct formats ((sp@(_, _, _), ChannelProtocol, rp@(_, _, _)), _, _, _) = error "-Ch-> symbol only allowed when using --vert flag!"
 fAct formats ((sp@(sender, b1, Just _), _, _), _, _, _) = error "Explicit pseudonyms not supported right now."
 fAct formats ((_, _, rp@(receiver, b2, Just _)), _, _, _) = error "Explicit pseudonyms not supported right now."
 -- (fChan formats channel,fMsg formats m,Nothing,Nothing)
@@ -1050,8 +1050,7 @@ endstr noowngoal =
     ++ "  attack_state secrets :=\n"
     ++ "    secrets(AnB_M,AnB_SET).\n"
     ++ "    iknows(AnB_M)\n"
-    ++ "    & not(contains(AnB_SET,i))\n"
-    ++ "  attack_state guesswhat :=\n"
+    ++ "    & not(contains(AnB_SET,i))\n"    ++ "  attack_state guesswhat :=\n"
     ++ "    guessChal(AnB_M,AnB_SET).\n"
     ++ "    iknows(AnB_M)\n"
     ++ "    & not(contains(AnB_SET,i))\n"

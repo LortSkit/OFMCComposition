@@ -296,7 +296,7 @@ parseArgs0 ("--numSess" : n : xs) (onp, anbonp) =
     then parseArgs0 xs (onp, anbonp {numSess = Just (read n)})
     else error "Multiple Declarations of \"numSess\" on command line"
 parseArgs0 ("--vert" : xs) (onp, anbonp) =
-  parseArgs0 xs (onp, anbonp{vert=True})
+  parseArgs0 xs (onp, anbonp {vert = True})
 parseArgs0 ("-typed" : xs) (onp, anbonp) =
   parseArgs0 xs (onp, anbonp {typed = True})
 parseArgs0 ("--of" : "FP" : xs) (onp, anbonp) =

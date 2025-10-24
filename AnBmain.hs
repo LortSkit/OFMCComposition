@@ -21,33 +21,37 @@ import Ast
 import FPTranslator
 import Lexer
 import Msg
-import Translator
 import ProtocolTranslationTypes
+import Translator
 import VertTranslator
 
 mkIF :: Protocol -> AnBOptsAndPars -> String
 mkIF (protocol@(_, typdec, knowledge, _, actions, _)) args =
-  ( if (vert args) then (\x -> x ++ vertendstr (noowngoal args)). vertruleList (if2cif args) (isAppProtocol actions).vertaddInit.vertcreateRules (isAppProtocol actions).vertformats else
-  ( if (outt args) == IF
-        then (\x -> x ++ endstr (noowngoal args)) . ruleList (if2cif args)
-        else
-          if ((outt args) == FP) || ((outt args) == FPI) || ((outt args) == Isa)
-            then ruleListFP [] True
-            else error ("Unknown output format: " ++ (show (outt args)))
-    )
-      . addInit
-      . addGoals
-      . rulesAddSteps
-      . createRules
-      . formats)
+  ( if (vert args)
+      then (\x -> x ++ vertendstr (noowngoal args)) . vertruleList (if2cif args) (isAppProtocol actions) . vertaddInit (isAppProtocol actions) . vertrulesAddSteps . vertcreateRules (isAppProtocol actions) . vertformats
+      else
+        ( if (outt args) == IF
+            then (\x -> x ++ endstr (noowngoal args)) . ruleList (if2cif args)
+            else
+              if ((outt args) == FP) || ((outt args) == FPI) || ((outt args) == Isa)
+                then ruleListFP [] True
+                else error ("Unknown output format: " ++ (show (outt args)))
+        )
+          . addInit
+          . addGoals
+          . rulesAddSteps
+          . createRules
+          . formats
+  )
     (mkPTS protocol args)
 
 isAppProtocol :: Actions -> Bool
-isAppProtocol []     = False
-isAppProtocol (a:as) = let ((_,channeltype,_),_,_,_) = a 
-                       in case channeltype of 
-                          ChannelProtocol -> True
-                          _               ->  isAppProtocol as
+isAppProtocol [] = False
+isAppProtocol (a : as) =
+  let ((_, channeltype, _), _, _, _) = a
+   in case channeltype of
+        ChannelProtocol -> True
+        _ -> isAppProtocol as
 
 newanbmain inputstr otp =
   (mkIF (anbparser (alexScanTokens inputstr)) otp)

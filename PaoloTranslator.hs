@@ -12,7 +12,7 @@ Open Source Fixedpoint Model-Checker version 2024
 All Rights Reserved.
 
 -}
---Alexander Laukamp created this file, though most things are taken from Translator.hs
+-- Alexander Laukamp created this file, though most things are taken from Translator.hs
 
 module PaoloTranslator where
 
@@ -43,20 +43,21 @@ ppFact Isa (FPState role msgs) = "State (r" ++ (ppId role) ++ ",[" ++ (ppMsgList
 ppFact outf (State role msgs) = "state_r" ++ (ppId role) ++ "(" ++ (ppMsgList outf (reorder (map snd msgs))) ++ ")"
 ppFact outf (FPState role msgs) = error "ppFact: should not have FPState" --- "state_r"++(ppId role)++"("++(ppMsgList outf msgs)++")"
 ppFact outf (Iknows msg) = "iknows(" ++ (ppMsg outf msg) ++ ")"
-ppFact outf (Fact "&" m) = "& " ++  ppMsgListAnds outf m -- only for use with --vert flag!
+ppFact outf (Fact "&" m) = "& " ++ ppMsgListAnds outf m -- only for use with --vert flag!
 ppFact outf (Fact i m) = (ppId i) ++ "(" ++ (ppMsgList outf m) ++ ")"
 
 ppFactList outf = (ppXList (ppFact outf) ".\n") . (filter isntIknowsFunction)
-                            
+
 -- meant to fix some things when using, e.g., & C/=i with the --vert flag, but should affect normal usage
-ppFactListBetter outf = let ppXListBetter :: (Fact -> String) -> String -> [Fact] -> String 
-                            ppXListBetter ppX sp (fact1:[]) = case fact1 of
-                                                                      Fact "&" _ -> "\n" ++ ppX fact1
-                                                                      _          -> sp ++ ppX fact1
-                            ppXListBetter ppX sp (fact1:facts) = case fact1 of
-                                                                      Fact "&" _ -> "\n" ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
-                                                                      _          -> sp ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
-                        in  (ppXListBetter (ppFact outf) "") . (filter isntIknowsFunction)
+ppFactListBetter outf =
+  let ppXListBetter :: (Fact -> String) -> String -> [Fact] -> String
+      ppXListBetter ppX sp (fact1 : []) = case fact1 of
+        Fact "&" _ -> "\n" ++ ppX fact1
+        _ -> sp ++ ppX fact1
+      ppXListBetter ppX sp (fact1 : facts) = case fact1 of
+        Fact "&" _ -> "\n" ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
+        _ -> sp ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
+   in (ppXListBetter (ppFact outf) "") . (filter isntIknowsFunction)
 
 ppEq outf (x, y) = (ppMsg outf x) ++ "/=" ++ (ppMsg outf y)
 
