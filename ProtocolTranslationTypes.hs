@@ -57,8 +57,9 @@ data ProtocolTranslationState = PTS
     options :: AnBOptsAndPars,
     roles :: [Role],
     rules :: [Rule],
-    initial :: String
+    initial :: String,
+    goals :: String
   }
 
 mkPTS :: Protocol -> AnBOptsAndPars -> ProtocolTranslationState
-mkPTS protocol options = PTS {protocol = protocol, options = options, roles = [], rules = [], initial = ""}
+mkPTS protocol options = PTS {protocol = protocol, options = options, roles = [], rules = [], initial = "", goals = ""}

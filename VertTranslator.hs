@@ -30,6 +30,7 @@ import Msg
 import MsgPat
 import PaoloTranslator
 import ProtocolTranslationTypes
+import Search (xexec_check)
 
 vertformats :: ProtocolTranslationState -> ProtocolTranslationState
 vertformats pts =
@@ -569,12 +570,12 @@ getTypes (_, t, _, _, _, _) = t
 vertruleList :: Bool -> Bool -> ProtocolTranslationState -> String
 vertruleList if2cif isappprot pts =
   -- pass the list of SQNs
-  ruleListIF (initial pts, rules pts) (trTypes2Ids (getTypes (protocol pts)) SeqNumber) if2cif isappprot
+  ruleListIF (initial pts, rules pts, goals pts) (trTypes2Ids (getTypes (protocol pts)) SeqNumber) if2cif isappprot
 
-ruleListIF :: (String, [Rule]) -> [Ident] -> Bool -> Bool -> String
+ruleListIF :: (String, [Rule], String) -> [Ident] -> Bool -> Bool -> String
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ init ++ "\n" ++ foldr (\a s ->(ppRule IF a ++"\n") ++s ) ""  rules) False = undefined
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ foldr (\a s ->show a ++ (ppRule IF a ++"\n") ++s ) ""  rules) False = undefined -- debug for --vert
-ruleListIF (init, rules) sqns if2cif isappprot =
+ruleListIF (init, rules, goals) sqns if2cif isappprot =
   let ruleIF [] _ _ = ""
       ruleIF (x : xs) (n, name) lastrulenr =
         let -- rule hacked SQN
@@ -590,9 +591,9 @@ ruleListIF (init, rules) sqns if2cif isappprot =
             stepandnr = "step " ++ stepnameonly
             iknowspart = if isappprot || rulenr == -1 then ".\niknows(" ++ stepnameonly ++ ")\n\n" else "\n\n"
          in stepandnr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr)
-   in init ++ (ruleIF (ruleSplit rules isappprot) (0, "a") (getlastrulenr rules))
+   in init ++ (ruleIF (ruleSplit rules isappprot) (0, "a") (getlastrulenr rules)) ++ "\n" ++ goals
 
-getlastrulenr rules = length rules + 3
+getlastrulenr rules = length rules + 3 -- TODO: is this legal?
 
 ruleSplit :: [Rule] -> Bool -> [Rule]
 -- ruleSplit rules | trace ("ruleSplit\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
@@ -626,7 +627,7 @@ ruleSplit rules False =
       r3 = replacetemp r'' chopenedpart
       r4 = replacetemp r'' chclosedpart
 
-      dummy_state = State "dummy" [(Atom "dummy", Atom "dummy"), (Atom "SID", Atom "SID"), (Atom "0", Atom "0")]
+      dummy_state = State "dummy" [(Atom "dummy", Atom "dummy"), (Atom "0", Atom "0"), (Atom "SID", Atom "SID")]
       firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"], Atom "globalcounter"] -- TODO: make sure c and T are unique!
       secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
       openedpart = Fact "contains" [Atom payloadident, Atom "opened"]
@@ -737,3 +738,46 @@ vertendstr noowngoal =
     ++ "  attack_state temp :=\n"
     ++ "    secret(AnB_M,AnB_A).\n"
     ++ "    iknows(AnB_M)\n"
+
+vertmakegoals :: Bool -> ProtocolTranslationState -> ProtocolTranslationState
+-- vertmakegoals isappprot pts | trace ("vertmakegoals\n" ++ (show (ruleSplit (rules pts) isappprot))) False = undefined
+vertmakegoals isappprot pts =
+  let lasttwoelems [] = error "vertmakegoals: cannot use internal function 'lasttwoelems' on empty list!"
+      lasttwoelems [_] = error "vertmakegoals: cannot use internal function 'lasttwoelems' on list with only one element!"
+      lasttwoelems [x1, x2] = [x1, x2]
+      lasttwoelems (x : xs) = lasttwoelems xs
+
+      vertrules = ruleSplit (rules pts) isappprot
+      chgoalrules = lasttwoelems vertrules
+
+      getfactlist :: [Rule] -> [[Fact]]
+      getfactlist [] = []
+      getfactlist [(_, _, _, r)] = [r]
+      getfactlist ((_, _, _, r) : rs) = r : getfactlist rs
+      chgoalfacts = getfactlist chgoalrules
+
+      removesndelem listt = head listt : tail (tail listt)
+      chgoalnoglobalcounter = map removesndelem chgoalfacts
+
+      applynot :: String -> Fact -> String
+      applynot output fact =
+        let trueoutput = (if output == "" then "" else output ++ ".\n")
+         in case fact of
+              Fact "contains" [Atom _, Comp Apply [Atom "secCh", _]] -> trueoutput ++ "    not(" ++ ppFactListBetter IF [fact] ++ ")"
+              f -> trueoutput ++ "    " ++ ppFactListBetter IF [fact]
+
+      attacknr = getlastrulenr (rules pts) + 2
+      chgoal1 = "  attack_state ch" ++ (show attacknr) ++ "a:=\n" ++ foldl applynot "" (head chgoalnoglobalcounter) ++ "\n\n"
+      chgoal2 = "  attack_state ch" ++ (show attacknr) ++ "b:=\n" ++ foldl applynot "" (head (tail chgoalnoglobalcounter)) ++ "\n\n"
+
+      sndfacttogoalbody facts =
+        let sndfact = head (tail facts)
+            getpayloadatom fact =
+              case fact of
+                Fact "contains" [Atom x, _] -> x
+                _ -> error "vertmakegoals: Local function 'getpayloadatom' --- This error should not be possible!"
+            payloadident = getpayloadatom sndfact
+         in "    " ++ ppFactListBetter IF [sndfact] ++ " &\n    iknows(" ++ payloadident ++ ")"
+
+      chgoal3 = "  attack_state closed_leak:=\n" ++ sndfacttogoalbody (head (tail chgoalnoglobalcounter))
+   in if isappprot then error "not made for app yet!" else pts {goals = "section attack_states:\n" ++ chgoal1 ++ chgoal2 ++ chgoal3}
