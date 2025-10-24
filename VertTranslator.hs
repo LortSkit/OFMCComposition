@@ -29,6 +29,7 @@ import PaoloTranslator
 import ProtocolTranslationTypes
 import LMsg (LMsg)
 import Debug.Trace
+import Data.Array (elems)
 
 vertformats :: ProtocolTranslationState -> ProtocolTranslationState
 vertformats pts =
@@ -200,18 +201,18 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot
              in (st, chtrafo True sender ct receiver (snd (last st)))
       firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"],Atom "globalcounter"] -- TODO: make sure c and T are unique!
       secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
-      msgstruct msg = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]]] else [] -- is removed from app3b in firstRuleSplitApp later
-      incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1--TODO: Make sure to get s & C's role names from knowledge!
-      outgoingmsg  = if msg2 == (Atom "i") then [] else msgstruct msg2--TODO: Make sure to get s & C's role names from knowledge!
+      msgstruct msg = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]]] else [Iknows msg] -- is removed from app3b in ruleSplit later --TODO: Make sure to get s & C's role names from knowledge!
+      incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1
+      outgoingmsg  = if msg2 == (Atom "i") then [] else msgstruct msg2
 
-      sentappfact = Fact "contains" [Atom "N", Comp Apply [Atom "sent", Comp Cat [Atom "s", Atom "C"]]] --TODO: Make sure to get N's name from knowledge!
-      sentchfact  = Fact "TEMP" [] -- Fact "contains" [Atom "G", Comp Apply [Atom "secCh", Comp Cat [Atom "s", Atom "C"]]] --TODO: Make sure to get N's name from knowledge!
+      sentappfact = Fact "contains" [Atom "N", Comp Apply [Atom "sent", Comp Cat [Atom "s", Atom "C"]]] --TODO: Make sure to get N, s, and C's names from knowledge!
+      sentchfact  = Fact "TEMP" [] 
       sentfact = if isappprot then sentappfact else sentchfact
 
       firstfactlist = if step == totalnrsteps 
-                      then firstfact : sentfact : incommingmsg --TODO: Make sure to get s & C's role names from knowledge and N from the rule!
+                      then firstfact : sentfact : incommingmsg 
                       else firstfact : incommingmsg
-      secondfactlist = if step == 0 
+      secondfactlist = if step == 0 || not isappprot
                        then secondfact : sentfact : outgoingmsg
                        else secondfact : outgoingmsg
    in ( ( ( State
@@ -553,27 +554,59 @@ ruleListIF (init, rules) sqns if2cif isappprot=
             nr1 = ppRuleIFHack x sqns
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
-            nextnrnm nr nm = if nm == "a" then (nr,"b") else ((nr+1),"")
+            nextnrnm nr nm = if nm == "a" then (nr,"b") else if isappprot then ((nr+1),"") else ((nr+1),"a")
             appliednr2 = if name == "b" then (unpack . Data.Text.replace (pack ",C") (pack ",i") . pack) (ppRule IF nr2) else ppRule IF nr2
             stepname = if isappprot then "app" else "ch"
-         in "step " ++ stepname ++ (show (n+3)) ++ name ++ ":=\n" ++ appliednr2 ++ ".\niknows(" ++ stepname ++ (show (n+3)) ++ name ++ ")\n\n" ++ (ruleIF xs (nextnrnm n name)) -- TODO: make sure the name is app or ch based on the protocol!
-   in init ++ (ruleIF (firstRuleSplitApp rules isappprot) (0,"a"))
+            iknowspart = if isappprot then ".\niknows(" ++ stepname ++ (show (n+3)) ++ name ++ ")\n\n" else "\n\n"
+         in "step " ++ stepname ++ (show (n+3)) ++ name ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name)) -- TODO: make sure the name is app or ch based on the protocol!
+   in init ++ (ruleIF (ruleSplit rules isappprot) (0,"a"))
 
-firstRuleSplitApp :: [Rule] -> Bool -> [Rule]
--- firstRuleSplitApp rules | trace ("firstRuleSplitApp\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
-firstRuleSplitApp rules False = rules
-firstRuleSplitApp rules True= 
+ruleSplit :: [Rule] -> Bool -> [Rule]
+-- ruleSplit rules | trace ("ruleSplit\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
+ruleSplit rules False = -- ch
+  let (l,eq,eqid,r) = head rules
+      payloadident = head eqid 
+      append a [] = [a]
+      append a (x:xs) = x:append a xs
+      l1 = append (Fact "contains" [Atom payloadident, Atom "opened"]) l
+      l2 = append (Fact "contains" [Atom payloadident, Atom "closed"]) l
+      lastelem [] = error "ruleSplit: cannot use internal function 'lastelem' on empty list!"
+      lastelem (elem:[]) = elem
+      lastelem (x:xs) = lastelem xs
+      msg = case lastelem r of
+            Iknows x -> x
+            _        -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
+      replacetemp [] _ = error "ruleSplit: cannot use internal function 'replacetemp' on empty list!"
+      replacetemp (x:xs) [e1,e2] = case x of 
+                                Fact "TEMP" _ -> e1 : e2 : xs
+                                _               -> x : replacetemp xs [e1,e2]
+      replacetemp _ _ = error "ruleSplit: cannot use internal function 'replacetemp' with elem list of length other than 2!"
+      secchfact = Fact "contains" [Atom payloadident,Comp Apply [Atom "secCh",Comp Cat [Atom "A", Atom "B"]]] --TODO: Grab A and B from knowledge s.t. it is not hard-coded!!!
+      chopenedpart = [Fact "contains" [Atom payloadident, Atom "opened"],secchfact]
+      chclosedpart = [Fact "contains" [Atom payloadident, Atom "closed"],secchfact]
+      r1 = replacetemp r chopenedpart
+      r2 = replacetemp r chclosedpart
+
+      (l',eq',equid',r') = head (tail rules)
+      iknowspart = lastelem l'
+      l3 = replacetemp l' chopenedpart
+      l4 = replacetemp l' chclosedpart
+      r'' = (append iknowspart r')
+      r3 = replacetemp r'' chopenedpart
+      r4 = replacetemp r'' chclosedpart
+  in [(l1,eq,[],r1),(l2,eq,[],r2),(l3,eq',equid',r3),(l4,eq',equid',r4)]
+ruleSplit rules True= -- app
   let (l,eq,eqid,r) = head rules 
       append a [] = [a]
       append a (x:xs) = x:append a xs
       l1 = append (Fact "&" [Comp Neq [Atom "C", Atom "i"]]) l -- TODO: Grab C from knowledge s.t. it is not hard-coded!!!
-      lastelem [] = error "firstRuleSplitApp: cannot use internal function 'lastelem' on empty list!"
+      lastelem [] = error "ruleSplit: cannot use internal function 'lastelem' on empty list!"
       lastelem (elem:[]) = elem
       lastelem (x:xs) = lastelem xs
       msg = case lastelem r of
             Fact "contains" [x,y] -> x
-            _                     -> error "firstRuleSplitApp failed! Guess I'm an idiot :c"
-      replacelastelem rep [] = error "firstRuleSplitApp: cannot use internal function 'replacelastelem' on empty list!"
+            _                     -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
+      replacelastelem rep [] = error "ruleSplit: cannot use internal function 'replacelastelem' on empty list!"
       replacelastelem rep (elem:[]) = rep:[]
       replacelastelem rep (x:xs) = x:replacelastelem rep xs
       newfact = Iknows msg
