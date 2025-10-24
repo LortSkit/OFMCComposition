@@ -581,13 +581,15 @@ ruleListIF (init, rules) sqns if2cif isappprot =
             nr1 = ppRuleIFHack x sqns
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
+            nextnrnm 0 "a" = if isappprot then (0, "b") else (1, "a")
             nextnrnm nr nm = if nm == "a" then (nr, "b") else if isappprot then ((nr + 1), "") else ((nr + 1), "a")
-            appliednr2 = if name == "b" then (unpack . Data.Text.replace (pack ",C") (pack ",i") . pack) (ppRule IF nr2) else ppRule IF nr2
+            appliednr2 = if name == "b" then (unpack . Data.Text.replace (pack ",C") (pack ",i") . pack) (ppRule IF nr2) else ppRule IF nr2 -- TODO: get C from memory!!
             stepname = if isappprot then "app" else "ch"
-            rulenr = n + 3
-            stepandnr = "step " ++ stepname ++ (show rulenr) ++ name
-            iknowspart = if isappprot then ".\niknows(" ++ stepname ++ (show rulenr) ++ name ++ ")\n\n" else "\n\n"
-         in stepandnr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr) -- TODO: make sure the name is app or ch based on the protocol!
+            rulenr = if isappprot then n + 3 else if n == 0 then -1 else if n == 1 then lastrulenr else n + 1
+            stepnameonly = if rulenr == -1 then "chnew" else stepname ++ (show rulenr) ++ name
+            stepandnr = "step " ++ stepnameonly
+            iknowspart = if isappprot || rulenr == -1 then ".\niknows(" ++ stepnameonly ++ ")\n\n" else "\n\n"
+         in stepandnr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr)
    in init ++ (ruleIF (ruleSplit rules isappprot) (0, "a") (getlastrulenr rules))
 
 getlastrulenr rules = length rules + 3
@@ -605,9 +607,6 @@ ruleSplit rules False =
       lastelem [] = error "ruleSplit: cannot use internal function 'lastelem' on empty list!"
       lastelem (elem : []) = elem
       lastelem (x : xs) = lastelem xs
-      msg = case lastelem r of
-        Iknows x -> x
-        _ -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
       replacetemp [] _ = error "ruleSplit: cannot use internal function 'replacetemp' on empty list!"
       replacetemp (x : xs) [e1, e2] = case x of
         Fact "TEMP" _ -> e1 : e2 : xs
@@ -626,7 +625,18 @@ ruleSplit rules False =
       r'' = (append iknowspart r')
       r3 = replacetemp r'' chopenedpart
       r4 = replacetemp r'' chclosedpart
-   in [(l1, eq, [], r1), (l2, eq, [], r2), (l3, eq', equid', r3), (l4, eq', equid', r4)]
+
+      dummy_state = State "dummy" [(Atom "dummy", Atom "dummy"), (Atom "SID", Atom "SID"), (Atom "0", Atom "0")]
+      firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"], Atom "globalcounter"] -- TODO: make sure c and T are unique!
+      secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
+      openedpart = Fact "contains" [Atom payloadident, Atom "opened"]
+      closedpart = Fact "contains" [Atom payloadident, Atom "closed"]
+      iknowspayload = Iknows (Atom payloadident)
+
+      stepnew = ([dummy_state, firstfact], [], [payloadident], [dummy_state, secondfact, closedpart])
+      step5a = ([dummy_state, firstfact, openedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
+      step5b = ([dummy_state, firstfact, closedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
+   in [stepnew, step5a, step5b, (l1, eq, [], r1), (l2, eq, [], r2), (l3, eq', equid', r3), (l4, eq', equid', r4)]
 ruleSplit rules True =
   -- app
   let (l, eq, eqid, r) = head rules

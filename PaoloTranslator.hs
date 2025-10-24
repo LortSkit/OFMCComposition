@@ -40,6 +40,7 @@ reorder l =
 
 ppFact Isa (State role msgs) = error "State-Fact in ISA mode"
 ppFact Isa (FPState role msgs) = "State (r" ++ (ppId role) ++ ",[" ++ (ppMsgList Isa (filter isntFunction msgs)) ++ "])"
+ppFact outf (State "dummy" msgs) = "state_dummy" ++ "(" ++ (ppMsgList outf (reorder (map snd msgs))) ++ ")"
 ppFact outf (State role msgs) = "state_r" ++ (ppId role) ++ "(" ++ (ppMsgList outf (reorder (map snd msgs))) ++ ")"
 ppFact outf (FPState role msgs) = error "ppFact: should not have FPState" --- "state_r"++(ppId role)++"("++(ppMsgList outf msgs)++")"
 ppFact outf (Iknows msg) = "iknows(" ++ (ppMsg outf msg) ++ ")"
