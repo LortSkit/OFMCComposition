@@ -71,6 +71,14 @@ tokens :-
   "secret"  { (\p s -> TSECRET p)}
   "between" { (\p s -> TBETWEEN p)}
   "guessable" { (\p s -> TGUESS p)}
+  "counter" { (\p s -> TCOUNTER p)}
+  "globalcounter" { (\p s -> TGLOBAL p)}
+  "TUniqueVar" { (\p s -> TUNIQVAR p)}
+  "sent" { (\p s -> TSETSENT p)}
+  "secCh" { (\p s -> TSETSECCH p)}
+  "opened" { (\p s -> TSETOPENED p)}
+  "closed" { (\p s -> TSETCLOSED p)}
+  "TEMP" { (\p s -> TTEMP p)}
   $alpha $identChar* { (\ p s -> TATOM p s) }
   $digit+       { (\ p s -> TATOM p s) }
 
@@ -115,6 +123,14 @@ data Token=
    | TUNEQUAL AlexPosn
    | TWHERE AlexPosn
    | TGUESS AlexPosn
+   | TCOUNTER AlexPosn
+   | TGLOBAL AlexPosn
+   | TUNIQVAR AlexPosn
+   | TSETSENT AlexPosn
+   | TSETSECCH AlexPosn
+   | TSETOPENED AlexPosn
+   | TSETCLOSED AlexPosn
+   | TTEMP AlexPosn
    deriving (Eq,Show)
 
 token_posn (TATOM p _)=p
@@ -153,5 +169,13 @@ token_posn (TBETWEEN p)=p
 token_posn (TWHERE p)=p
 token_posn (TUNEQUAL p)=p
 token_posn (TGUESS p)=p
+token_posn (TCOUNTER p)=p
+token_posn (TGLOBAL p)=p
+token_posn (TUNIQVAR p)=p
+token_posn (TSETSENT p)=p
+token_posn (TSETSECCH p)=p
+token_posn (TSETOPENED p)=p
+token_posn (TSETCLOSED p)=p
+token_posn (TTEMP p)=p
 }
 

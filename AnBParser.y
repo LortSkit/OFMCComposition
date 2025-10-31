@@ -61,6 +61,14 @@ import Msg
   "on" {TON _}
   "secret"  { TSECRET _}
   "between"  { TBETWEEN _}
+  "counter" { TCOUNTER _}
+  "globalcounter" { TGLOBAL _}
+  "TUniqueVar" {TUNIQVAR _}
+  "sent" { TSETSENT _}
+  "secCh" { TSETSECCH _}
+  "opened" { TSETOPENED _}
+  "closed" { TSETCLOSED _}
+  "TEMP" {TTEMP _}
 
 %%
 

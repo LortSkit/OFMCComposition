@@ -209,8 +209,8 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot
       gets = if step == 0 then fst else snd
       getc = if step == 0 then snd else fst
 
-      firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"], Atom "globalcounter"] -- TODO: make sure c and T are unique!
-      secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
+      firstfact = Fact "contains" [Comp Apply [Atom "counter", Atom "TUniqueVar"], Atom "globalcounter"]
+      secondfact = Fact "contains" [Atom "TUniqueVar", Atom "globalcounter"]
       msgstruct msg = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom (gets senderreceiver), Atom (getc senderreceiver)]]]] else [Iknows msg] -- is removed from app3b in ruleSplit later
       incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1
       outgoingmsg = if msg2 == (Atom "i") then [] else msgstruct msg2
@@ -404,8 +404,8 @@ vertaddInit isappprot maxDep pts =
           ++ ik0
           ++ (getCrypto agents0)
       agents = ((++) ["i", "A", "B"]) agents0
-      addedtypes = if isappprot then printTypes [(Function, ["sent", "secCh"])] else printTypes [(Set, ["opened", "closed"])] ++ printTypes [(Function, ["secCh"])] -- TODO: make names protected?
-      addedcounter = createGlobalCounter maxDep "c" -- TODO: use protected globalcounter and c names when done
+      addedtypes = if isappprot then printTypes [(Function, ["sent", "secCh"])] else printTypes [(Set, ["opened", "closed"])] ++ printTypes [(Function, ["secCh"])]
+      addedcounter = createGlobalCounter maxDep "counter"
       addeddummy = if isappprot then "" else "state_dummy(dummy,1,0).\n"
    in pts
         { initial =
@@ -416,8 +416,8 @@ vertaddInit isappprot maxDep pts =
                       ++ ":agent\n"
                       ++ (printTypes typdec)
                       ++ addedtypes
-                      ++ (printTypes [(Function, ["c"])]) -- TODO: make names protected?
-                      ++ (printTypes [(Set, ["globalcounter"])]) -- TODO: make names protected?
+                      ++ (printTypes [(Function, ["counter"])])
+                      ++ (printTypes [(Set, ["globalcounter"])])
                       ++ "\n"
                   )
                 else ""
@@ -443,7 +443,7 @@ createCounter len countername countersetname =
           _ -> "0"
    in "contains(" ++ applyRecursion len countername ++ "," ++ countersetname ++ ").\n"
 
-createGlobalCounter len funcname = createCounter len funcname "globalcounter" -- TODO: use protected globalcounter name when done
+createGlobalCounter len funcname = createCounter len funcname "globalcounter"
 
 getCrypto :: [Ident] -> [Fact]
 getCrypto agents =
@@ -680,8 +680,8 @@ ruleSplit rules False =
       r4 = replacetemp r'' chclosedpart
 
       dummy_state = State "dummy" [(Atom "dummy", Atom "dummy"), (Atom "0", Atom "0"), (Atom "SID", Atom "SID")]
-      firstfact = Fact "contains" [Comp Apply [Atom "c", Atom "T"], Atom "globalcounter"] -- TODO: make sure c and T are unique!
-      secondfact = Fact "contains" [Atom "T", Atom "globalcounter"]
+      firstfact = Fact "contains" [Comp Apply [Atom "counter", Atom "TUniqueVar"], Atom "globalcounter"]
+      secondfact = Fact "contains" [Atom "TUniqueVar", Atom "globalcounter"]
       openedpart = Fact "contains" [Atom payloadident, Atom "opened"]
       closedpart = Fact "contains" [Atom payloadident, Atom "closed"]
       iknowspayload = Iknows (Atom payloadident)
