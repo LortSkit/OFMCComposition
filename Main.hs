@@ -244,6 +244,7 @@ parseArgs (x : xs) =
           anboutput = Nothing,
           numSess = Nothing,
           vert = False,
+          maxDepth = Nothing,
           outt = Internal,
           typed = True,
           iterateFP = 0,
@@ -273,7 +274,7 @@ parseArgs0 ("-t" : xs) (onp, anbonp) =
   -- equal to trace
   let (xs', xs'') = span (\x -> (x /= "") && (isDigit (debughead "at parseArg" x))) xs
    in parseArgs0 xs'' (onp {path = Just (map read xs'), por = True}, anbonp)
-parseArgs0 ("--depth" : v : xs) (onp, anbonp) = parseArgs0 xs (onp {depth = Just (read v)}, anbonp)
+parseArgs0 ("--depth" : v : xs) (onp, anbonp) = parseArgs0 xs (onp {depth = Just (read v)}, anbonp {maxDepth = Just (read v)}) -- maxDepth only used when using --vert flag
 parseArgs0 ("-n" : v : xs) (onp, anbonp) = parseArgs0 xs (onp {depth = Just (read v)}, anbonp) -- equal to --depth
 parseArgs0 ("--sessco" : xs) (onp, anbonp) = parseArgs0 xs (onp {sessco = True}, anbonp)
 parseArgs0 ("--untyped" : xs) (onp, anbonp) =
@@ -296,7 +297,10 @@ parseArgs0 ("--numSess" : n : xs) (onp, anbonp) =
     then parseArgs0 xs (onp, anbonp {numSess = Just (read n)})
     else error "Multiple Declarations of \"numSess\" on command line"
 parseArgs0 ("--vert" : xs) (onp, anbonp) =
-  parseArgs0 xs (onp, anbonp {vert = True})
+  let dep = depth onp
+      maxDep = maxDepth anbonp
+      newDepth = if isNothing dep && isNothing maxDep then vertGlobalCounterDepth else fromJust dep
+   in parseArgs0 xs (onp, anbonp {vert = True, maxDepth = Just newDepth})
 parseArgs0 ("-typed" : xs) (onp, anbonp) =
   parseArgs0 xs (onp, anbonp {typed = True})
 parseArgs0 ("--of" : "FP" : xs) (onp, anbonp) =

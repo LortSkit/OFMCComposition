@@ -63,6 +63,8 @@ data AnBOptsAndPars
     numSess :: Maybe Int,
     -- | flag for vertical comp model (either app or ch protocol)
     vert :: Bool,
+    -- | max depth of globalcounter when using --vert flag
+    maxDepth :: Maybe Int,
     -- | Output type
     outt :: OutputType,
     -- | flag for typed protocol model

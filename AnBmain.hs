@@ -18,6 +18,7 @@ module AnBmain (newanbmain) where
 import AnBOnP
 import AnBParser
 import Ast
+import Data.Maybe
 import FPTranslator
 import Lexer
 import Msg
@@ -28,7 +29,7 @@ import VertTranslator
 mkIF :: Protocol -> AnBOptsAndPars -> String
 mkIF (protocol@(_, typdec, knowledge, _, actions, _)) args =
   ( if (vert args)
-      then vertruleList (if2cif args) (isAppProtocol actions) . vertmakegoals (isAppProtocol actions) . vertaddInit (isAppProtocol actions) . vertrulesAddSteps . vertcreateRules (isAppProtocol actions) . vertformats
+      then vertruleList (if2cif args) (isAppProtocol actions) . vertmakegoals (isAppProtocol actions) . vertaddInit (isAppProtocol actions) (fromJust (maxDepth args)) . vertrulesAddSteps . vertcreateRules (isAppProtocol actions) . vertformats
       else
         ( if (outt args) == IF
             then (\x -> x ++ endstr (noowngoal args)) . ruleList (if2cif args)

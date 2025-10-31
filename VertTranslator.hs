@@ -386,8 +386,8 @@ vertrulesAddSteps pts =
 --- Stage 4: Adding the initial state
 -------------------------------------
 
-vertaddInit :: Bool -> ProtocolTranslationState -> ProtocolTranslationState
-vertaddInit isappprot pts =
+vertaddInit :: Bool -> Int -> ProtocolTranslationState -> ProtocolTranslationState
+vertaddInit isappprot maxDep pts =
   let (_, typdec, knowledge, _, _, _) = protocol pts
       args = options pts
       absInit = getinitials (rules pts) knowledge
@@ -405,7 +405,7 @@ vertaddInit isappprot pts =
           ++ (getCrypto agents0)
       agents = ((++) ["i", "A", "B"]) agents0
       addedtypes = if isappprot then printTypes [(Function, ["sent", "secCh"])] else printTypes [(Set, ["opened", "closed"])] ++ printTypes [(Function, ["secCh"])] -- TODO: make names protected?
-      addedcounter = "contains(apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,apply(c,0))))))),globalcounter).\n" -- TODO: Make sure it contains as many steps as specified (somewhere)!
+      addedcounter = createGlobalCounter maxDep "c" -- TODO: use protected globalcounter and c names when done
       addeddummy = if isappprot then "" else "state_dummy(dummy,1,0).\n"
    in pts
         { initial =
@@ -416,8 +416,8 @@ vertaddInit isappprot pts =
                       ++ ":agent\n"
                       ++ (printTypes typdec)
                       ++ addedtypes
-                      ++ (printTypes [(Function, ["c"])])
-                      ++ (printTypes [(Set, ["globalcounter"])])
+                      ++ (printTypes [(Function, ["c"])]) -- TODO: make names protected?
+                      ++ (printTypes [(Set, ["globalcounter"])]) -- TODO: make names protected?
                       ++ "\n"
                   )
                 else ""
@@ -435,6 +435,15 @@ vertaddInit isappprot pts =
               ++ "\n\n"
               ++ "section rules:\n"
         }
+
+createCounter len countername countersetname =
+  let applyRecursion len countername =
+        case compare len 0 of
+          GT -> "apply(" ++ countername ++ "," ++ applyRecursion (len - 1) countername ++ ")"
+          _ -> "0"
+   in "contains(" ++ applyRecursion len countername ++ "," ++ countersetname ++ ").\n"
+
+createGlobalCounter len funcname = createCounter len funcname "globalcounter" -- TODO: use protected globalcounter name when done
 
 getCrypto :: [Ident] -> [Fact]
 getCrypto agents =

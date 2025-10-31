@@ -36,3 +36,7 @@ generateLabels = False
 -- | Print it pretty, i.e. @crypt(K,M)@ is printed as @{M}K@
 -- and @scrypt(K,M)@ as @{|M|}K@ and @pair(M1,M2)@ as @M1,M2@.
 printMsgsPretty = True
+
+-- | For when using --vert flag, makes sure it only goes to depth of 7, since the search tree gets very big very fast
+vertGlobalCounterDepth :: Int
+vertGlobalCounterDepth = 7
