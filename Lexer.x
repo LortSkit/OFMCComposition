@@ -74,6 +74,8 @@ tokens :-
   "counter" { (\p s -> TCOUNTER p)}
   "globalcounter" { (\p s -> TGLOBAL p)}
   "TUniqueVar" { (\p s -> TUNIQVAR p)}
+  "Xxx" { (\p s -> TUNIQVARX p)}
+  "Yyy" { (\p s -> TUNIQVARY p)}
   "sent" { (\p s -> TSETSENT p)}
   "secCh" { (\p s -> TSETSECCH p)}
   "opened" { (\p s -> TSETOPENED p)}
@@ -126,6 +128,8 @@ data Token=
    | TCOUNTER AlexPosn
    | TGLOBAL AlexPosn
    | TUNIQVAR AlexPosn
+   | TUNIQVARX AlexPosn
+   | TUNIQVARY AlexPosn
    | TSETSENT AlexPosn
    | TSETSECCH AlexPosn
    | TSETOPENED AlexPosn
@@ -172,6 +176,8 @@ token_posn (TGUESS p)=p
 token_posn (TCOUNTER p)=p
 token_posn (TGLOBAL p)=p
 token_posn (TUNIQVAR p)=p
+token_posn (TUNIQVARX p)=p
+token_posn (TUNIQVARY p)=p
 token_posn (TSETSENT p)=p
 token_posn (TSETSECCH p)=p
 token_posn (TSETOPENED p)=p

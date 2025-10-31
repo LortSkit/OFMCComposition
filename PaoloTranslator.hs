@@ -51,12 +51,18 @@ ppFactList outf = (ppXList (ppFact outf) ".\n") . (filter isntIknowsFunction)
 
 -- meant to fix some things when using, e.g., & C/=i with the --vert flag, but should affect normal usage
 ppFactListBetter outf =
-  let ppXListBetter :: (Fact -> String) -> String -> [Fact] -> String
+  let firstelem [] = error "ppFactListBetter: cannot use internal function 'firstelem' on empty list!"
+      firstelem (x : _) = x
+      ppXListBetter :: (Fact -> String) -> String -> [Fact] -> String
       ppXListBetter ppX sp (fact1 : []) = case fact1 of
-        Fact "&" _ -> "\n" ++ ppX fact1
+        Fact "&" _ ->
+          let updatedsp = if sp == "" then "" else "\n"
+           in updatedsp ++ ppX fact1
         _ -> sp ++ ppX fact1
       ppXListBetter ppX sp (fact1 : facts) = case fact1 of
-        Fact "&" _ -> "\n" ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
+        Fact "&" _ ->
+          let updatedsp = if sp == "" then "" else "\n"
+           in updatedsp ++ ppX fact1 ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
         _ -> sp ++ ppX fact1 ++ ppXListBetter ppX ".\n" facts
    in (ppXListBetter (ppFact outf) "") . (filter isntIknowsFunction)
 

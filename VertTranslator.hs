@@ -22,7 +22,6 @@ import Control.Monad
 import Data.Array (elems)
 import Data.List
 import Data.Maybe
-import Data.Text (pack, replace, unpack)
 import Debug.Trace
 import LMsg
 import LMsg (LMsg)
@@ -184,6 +183,7 @@ manageRules step fresh states actions pks totalnrsteps isappprot firstfresh =
                   firstfresh
           )
 
+createRule :: (Num p, Eq p) => [Ident] -> [Ident] -> Ident -> [LMsg] -> Maybe (Peer, ChannelType, Peer, Msg, Maybe Msg) -> Maybe (Peer, ChannelType, Peer, Msg, e) -> p -> p -> Bool -> [Ident] -> (([Fact], [a], [Ident], [Fact]), [LMsg])
 createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot firstfresh =
   let (state1, msg1) =
         case incomin of
@@ -205,15 +205,17 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot
         case coming of
           Just ((senderident, _, _), _, (receiverident, _, _), _, _) -> (senderident, receiverident)
           _ -> ("", "")
-      senderreceiver = if msg1 == Atom "i" then getsenderreceiver outgoin else getsenderreceiver incomin
-      gets = if step == 0 then fst else snd
-      getc = if step == 0 then snd else fst
+      senderreceiver = if msg2 == Atom "i" then getsenderreceiver incomin else getsenderreceiver outgoin
+      gets = if step == totalnrsteps then snd else fst
+      getc = if step == totalnrsteps then fst else snd
+      getsecchsender = if msg1 /= (Atom "i") && msg2 /= (Atom "i") then snd else fst
+      getsecchreceiver = if msg1 /= (Atom "i") && msg2 /= (Atom "i") then fst else snd
 
       firstfact = Fact "contains" [Comp Apply [Atom "counter", Atom "TUniqueVar"], Atom "globalcounter"]
       secondfact = Fact "contains" [Atom "TUniqueVar", Atom "globalcounter"]
-      msgstruct msg = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom (gets senderreceiver), Atom (getc senderreceiver)]]]] else [Iknows msg] -- is removed from app3b in ruleSplit later
-      incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1
-      outgoingmsg = if msg2 == (Atom "i") then [] else msgstruct msg2
+      msgstruct msg getsender getreceiver = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom (getsender senderreceiver), Atom (getreceiver senderreceiver)]]]] else [Iknows msg] -- is removed from app3b in ruleSplit later
+      incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1 getsecchsender getsecchreceiver
+      outgoingmsg = if msg2 == (Atom "i") then [] else if step == 0 then msgstruct msg2 getsecchsender getsecchreceiver else msgstruct msg2 getsecchreceiver getsecchsender
 
       sentappfact = Fact "contains" [Atom (head firstfresh), Comp Apply [Atom "sent", Comp Cat [Atom (gets senderreceiver), Atom (getc senderreceiver)]]]
       sentchfact = Fact "TEMP" [Comp Cat [Atom (gets senderreceiver), Atom (getc senderreceiver)]]
@@ -406,7 +408,7 @@ vertaddInit isappprot maxDep pts =
       agents = ((++) ["i", "A", "B"]) agents0
       addedtypes = if isappprot then printTypes [(Function, ["sent", "secCh"])] else printTypes [(Set, ["opened", "closed"])] ++ printTypes [(Function, ["secCh"])]
       addedcounter = createGlobalCounter maxDep "counter"
-      addeddummy = if isappprot then "" else "state_dummy(dummy,1,0).\n"
+      addeddummy = "state_dummy(dummy,1,0).\n"
    in pts
         { initial =
             ( if typed args
@@ -600,14 +602,14 @@ ruleListIF (init, rules, goals) sqns if2cif isappprot =
             nr1 = ppRuleIFHack x sqns
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
-            nextnrnm 0 "a" = if isappprot then (0, "b") else (1, "a")
-            nextnrnm nr nm = if nm == "a" then (nr, "b") else if isappprot then ((nr + 1), "") else ((nr + 1), "a")
+            nextnrnm 0 "a" = if isappprot then (1, "b") else (1, "a")
+            nextnrnm nr nm = if isappprot then ((nr + 1), "") else if nm == "a" then (nr, "b") else ((nr + 1), "a")
             appliednr2 = ppRule IF nr2
-            stepname = if isappprot then "app" else "ch"
-            rulenr = if isappprot then n + 3 else if n == 0 then -1 else if n == 1 then lastrulenr else n + 1
-            stepnameonly = if rulenr == -1 then "chnew" else stepname ++ (show rulenr) ++ name
+            stepname = if isappprot then if n == 0 || n == 1 then "i" else "app" else "ch"
+            rulenr = if isappprot then if n == 0 || n == 1 then n + 5 else n + 1 else if n == 0 then -1 else if n == 1 then lastrulenr else n + 1
+            stepnameonly = if rulenr == -1 then "chnew" else if isappprot then stepname ++ (show rulenr) else stepname ++ (show rulenr) ++ (name)
             stepandnr = "step " ++ stepnameonly
-            iknowspart = if isappprot || rulenr == -1 then ".\niknows(" ++ stepnameonly ++ ")\n\n" else "\n\n"
+            iknowspart = if (isappprot && n /= 0) || rulenr == -1 then ".\niknows(" ++ stepnameonly ++ ")\n\n" else "\n\n"
          in stepandnr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr)
    in init ++ (ruleIF (ruleSplit rules isappprot) (0, "a") (getlastrulenr rules)) ++ "\n" ++ goals
 
@@ -692,30 +694,37 @@ ruleSplit rules False =
    in [stepnew, step5a, step5b, (l1, eq, [], r1), (l2, eq, [], r2), (l3, eq', equid', r3), (l4, eq', equid', r4)]
 ruleSplit rules True =
   -- app
-  let (l, eq, eqid, r) = head rules
-      thirdelem listt = head (tail (tail listt))
-      getscfromfact fact =
-        case fact of
-          Fact "contains" [Atom n, Comp Apply [Atom "sent", Comp Cat [Atom s, Atom c]]] -> (s, c)
-          _ -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (fact))
-      sc = getscfromfact (thirdelem r)
-
-      append a [] = [a]
-      append a (x : xs) = x : append a xs
-      l1 = append (Fact "&" [Comp Neq [Atom (snd sc), Atom "i"]]) l
-      l2 = replaceatomfactlist (snd sc) "i" l
+  let (l, eq, eqid, r) = head (tail rules)
+      (l2, eq2, eqid2, r2) = head (tail (tail rules))
       lastelem [] = error "ruleSplit: cannot use internal function 'lastelem' on empty list!"
       lastelem (elem : []) = elem
       lastelem (x : xs) = lastelem xs
-      msg = case lastelem r of
-        Fact "contains" [x, y] -> x
-        _ -> error ("ruleSplit failed! Guess I'm an idiot :c lastelem = " ++ show (lastelem r))
-      replacelastelem rep [] = error "ruleSplit: cannot use internal function 'replacelastelem' on empty list!"
-      replacelastelem rep (elem : []) = rep : []
-      replacelastelem rep (x : xs) = x : replacelastelem rep xs
-      newfact = Iknows msg
-      r2 = replaceatomfactlist (snd sc) "i" (replacelastelem newfact r)
-   in (l1, eq, eqid, r) : (l2, eq, eqid, r2) : tail rules
+      keepinsecch = lastelem l
+      macscrtapply = lastelem r
+
+      append a [] = [a]
+      append a (x : xs) = x : append a xs
+      r' = append keepinsecch r
+
+      removelastelem [] = error "ruleSplit: cannot use internal function 'removelastelem' on empty list!"
+      removelastelem [_] = []
+      removelastelem (x : xs) = x : removelastelem xs
+      replacelastelem elem listt = append elem (removelastelem listt)
+      l2' = replacelastelem macscrtapply l2
+      r2' = append macscrtapply r2
+
+      dummy_state = State "dummy" [(Atom "dummy", Atom "dummy"), (Atom "0", Atom "0"), (Atom "SID", Atom "SID")]
+      firstfact = Fact "contains" [Comp Apply [Atom "counter", Atom "TUniqueVar"], Atom "globalcounter"]
+      secondfact = Fact "contains" [Atom "TUniqueVar", Atom "globalcounter"]
+
+      secchpart frst sndd = Fact "contains" [Atom "Xxx", Comp Apply [Atom "secCh", Comp Cat [Atom frst, Atom sndd]]]
+      i5secchpart = secchpart "Yyy" "i"
+      i6secchpart = secchpart "i" "Yyy"
+      iknowspart = Iknows (Atom "Xxx")
+
+      stepi5 = ([dummy_state, firstfact, i5secchpart], [], [], [dummy_state, secondfact, i5secchpart, iknowspart])
+      stepi6 = ([dummy_state, firstfact, iknowspart], [], [], [dummy_state, secondfact, i6secchpart])
+   in [stepi5, stepi6, head rules, (l, eq, eqid, r'), (l2', eq2, eqid2, r2')]
 
 ppRuleIF2CIF :: Rule -> Rule
 -- ppRuleIF2CIF r | trace ("ppRuleIF2CIF\n\tr: " ++ ppRule IF r) False = undefined
@@ -802,6 +811,7 @@ vertendstr noowngoal =
 vertmakegoals :: Bool -> ProtocolTranslationState -> ProtocolTranslationState
 -- vertmakegoals isappprot pts | trace ("vertmakegoals\n" ++ (show (ruleSplit (rules pts) isappprot))) False = undefined
 vertmakegoals False pts =
+  -- ch
   let lasttwoelems [] = error "vertmakegoals: cannot use internal function 'lasttwoelems' on empty list!"
       lasttwoelems [_] = error "vertmakegoals: cannot use internal function 'lasttwoelems' on list with only one element!"
       lasttwoelems [x1, x2] = [x1, x2]
@@ -842,6 +852,7 @@ vertmakegoals False pts =
       chgoal3 = "  attack_state closed_leak:=\n" ++ sndfacttogoalbody (head (tail chgoalnoglobalcounter))
    in pts {goals = "section attack_states:\n" ++ chgoal1 ++ chgoal2 ++ chgoal3}
 vertmakegoals True pts =
+  -- app
   let (l, eq, eqid, r) = head (rules pts)
       thirdelem listt = head (tail (tail listt))
       getscfromfact fact =
@@ -867,12 +878,17 @@ vertmakegoals True pts =
           Fact "contains" [Comp Cat x, msg] -> Fact "contains" [Comp Cat x, replaceatommsg (snd sc) "i" msg] : replacewithi facts
           f -> replaceatomfact (snd sc) "i" f : replacewithi facts
 
-      printfact :: String -> Fact -> String
-      printfact output fact =
-        let trueoutput = (if output == "" then "" else output ++ ".\n")
-         in trueoutput ++ "    " ++ ppFactListBetter IF [fact]
+      append a [] = [a]
+      append a (x : xs) = x : append a xs
 
-      appgoalfacts = replacewithi (removesnd (getfactlist appgoalrules))
-      attacknr = getlastrulenr (rules pts) + 1
-      appgoal = "  attack_state app" ++ (show attacknr) ++ ":=\n" ++ foldl printfact "" (appgoalfacts)
+      appgoalfacts = append (Fact "&" [Comp Neq [Atom (snd sc), Atom "i"]]) (replacewithi (removesnd (getfactlist appgoalrules)))
+      attacknr = getlastrulenr (rules pts)
+
+      addspacing :: [String] -> [String]
+      addspacing [] = []
+      addspacing (x : xs) = ("    " ++ x) : addspacing xs
+      relinklist [] = []
+      relinklist (x : xs) = x ++ "\n" ++ relinklist xs
+
+      appgoal = "  attack_state app" ++ (show attacknr) ++ ":=\n" ++ relinklist (addspacing (lines (ppFactListBetter IF (appgoalfacts))))
    in pts {goals = "section attack_states:\n" ++ appgoal}

@@ -64,6 +64,8 @@ import Msg
   "counter" { TCOUNTER _}
   "globalcounter" { TGLOBAL _}
   "TUniqueVar" {TUNIQVAR _}
+  "Xxx" {TUNIQVARX _}
+  "Yyy" {TUNIQVARY _}
   "sent" { TSETSENT _}
   "secCh" { TSETSECCH _}
   "opened" { TSETOPENED _}
