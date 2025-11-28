@@ -29,7 +29,12 @@ import VertTranslator
 mkIF :: Protocol -> AnBOptsAndPars -> String
 mkIF (protocol@(_, typdec, knowledge, _, actions, _)) args =
   ( if (vert args)
-      then vertruleList (if2cif args) (isAppProtocol actions) . vertmakegoals (isAppProtocol actions) . vertaddInit (isAppProtocol actions) (fromJust (maxDepth args)) . vertrulesAddSteps . vertcreateRules (isAppProtocol actions) . vertformats
+      then
+        let isApp = isAppProtocol actions
+            (errVar, numActions) = if isApp then isAppCompliant actions else isChCompliant actions
+            protocolType = if isApp then "App" else "Ch"
+            expectedNumActions = if isApp then 2 else 1
+         in if not errVar then error ("Protocol is not compliant with " ++ protocolType ++ " protocol: Protocol has " ++ show numActions ++ " actions, expected " ++ show expectedNumActions) else vertruleList (if2cif args) isApp . vertmakegoals isApp . vertaddInit isApp (fromJust (maxDepth args)) . vertrulesAddSteps . vertcreateRules isApp . vertformats
       else
         ( if (outt args) == IF
             then (\x -> x ++ endstr (noowngoal args)) . ruleList (if2cif args)
@@ -54,5 +59,12 @@ isAppProtocol (a : as) =
         ChannelProtocol -> True
         _ -> isAppProtocol as
 
+isAppCompliant :: Actions -> (Bool, Int)
+isAppCompliant actions = (length actions == 2, length actions)
+
+isChCompliant :: Actions -> (Bool, Int)
+isChCompliant actions = (length actions == 1, length actions)
+
+newanbmain :: String -> AnBOptsAndPars -> String
 newanbmain inputstr otp =
   (mkIF (anbparser (alexScanTokens inputstr)) otp)
