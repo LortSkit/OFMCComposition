@@ -78,3 +78,5 @@ data AnBOptsAndPars
     -- | rewriting step from IF/Annotated AnB to cryptIF
     if2cif :: Bool
   }
+
+data GoalType = Secc | Auth deriving (Enum, Show, Eq)

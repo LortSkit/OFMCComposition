@@ -66,8 +66,10 @@ import Msg
   "TUniqueVar" {TUNIQVAR _}
   "Xxx" {TUNIQVARX _}
   "Yyy" {TUNIQVARY _}
+  "Zzz" {TUNIQVARZ _}
   "sent" { TSETSENT _}
   "secCh" { TSETSECCH _}
+  "authCh" { TSETAUTHCH _}
   "opened" { TSETOPENED _}
   "closed" { TSETCLOSED _}
   "TEMP" {TTEMP _}

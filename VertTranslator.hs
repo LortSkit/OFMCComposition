@@ -116,8 +116,8 @@ fMsg formats (Atom a) = Atom a
 ---- Translation Stage 1: Creating Rules
 ----------------------------------------
 
-vertcreateRules :: Bool -> ProtocolTranslationState -> ProtocolTranslationState
-vertcreateRules isappprot pts =
+vertcreateRules :: Bool -> GoalType -> ProtocolTranslationState -> ProtocolTranslationState
+vertcreateRules isappprot goaltype pts =
   let (p@(_, types, knowledge, abstractions, actions, goals)) = protocol pts
       frMsg = fresh p
       pks = concatMap snd ((filter (\(x, y) -> x == PublicKey)) types)
@@ -127,9 +127,9 @@ vertcreateRules isappprot pts =
             . (filter (\x -> case (fst x) of Agent _ _ -> True; _ -> False))
         )
           types
-   in pts {rules = manageRules 0 frMsg (\x -> initialState (lookupL x knowledge)) actions pks (length actions) isappprot frMsg}
+   in pts {rules = manageRules 0 frMsg (\x -> initialState (lookupL x knowledge)) actions pks (length actions) isappprot goaltype frMsg}
 
-manageRules step fresh states actions pks totalnrsteps isappprot firstfresh =
+manageRules step fresh states actions pks totalnrsteps isappprot goaltype firstfresh =
   --- about step number (=list index+1)
   --- initially 0: there is no incoming message
   --- finally (length actions): there is no outgoing message
@@ -167,7 +167,7 @@ manageRules step fresh states actions pks totalnrsteps isappprot firstfresh =
                           ++ (show b')
                       )
                   else fromJust b
-      (rule, state') = createRule thisfresh freshpks ub (states ub) min mout step totalnrsteps isappprot firstfresh
+      (rule, state') = createRule thisfresh freshpks ub (states ub) min mout step totalnrsteps isappprot goaltype firstfresh
    in rule
         : ( if step == (length actions)
               then []
@@ -180,11 +180,12 @@ manageRules step fresh states actions pks totalnrsteps isappprot firstfresh =
                   pks
                   totalnrsteps
                   isappprot
+                  goaltype
                   firstfresh
           )
 
-createRule :: (Num p, Eq p) => [Ident] -> [Ident] -> Ident -> [LMsg] -> Maybe (Peer, ChannelType, Peer, Msg, Maybe Msg) -> Maybe (Peer, ChannelType, Peer, Msg, e) -> p -> p -> Bool -> [Ident] -> (([Fact], [a], [Ident], [Fact]), [LMsg])
-createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot firstfresh =
+createRule :: (Num p, Eq p) => [Ident] -> [Ident] -> Ident -> [LMsg] -> Maybe (Peer, ChannelType, Peer, Msg, Maybe Msg) -> Maybe (Peer, ChannelType, Peer, Msg, e) -> p -> p -> Bool -> GoalType -> [Ident] -> (([Fact], [a], [Ident], [Fact]), [LMsg])
+createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot goaltype firstfresh =
   let (state1, msg1) =
         case incomin of
           Nothing -> (state, Atom "i")
@@ -206,16 +207,20 @@ createRule fresh freshpks role state incomin outgoin step totalnrsteps isappprot
           Just ((senderident, _, _), _, (receiverident, _, _), _, _) -> (senderident, receiverident)
           _ -> ("", "")
       senderreceiver = if msg2 == Atom "i" then getsenderreceiver incomin else getsenderreceiver outgoin
+      setName
+        | goaltype == Secc = "secCh"
+        | goaltype == Auth = "authCh"
+        | otherwise = error "This cannot happen!"
       gets = if step == totalnrsteps then snd else fst
       getc = if step == totalnrsteps then fst else snd
-      getsecchsender = if msg1 /= (Atom "i") && msg2 /= (Atom "i") then snd else fst
-      getsecchreceiver = if msg1 /= (Atom "i") && msg2 /= (Atom "i") then fst else snd
+      getsetnamesender = if msg1 /= (Atom "i") && msg2 /= (Atom "i") then snd else fst
+      getsetnamereceiver = if msg1 /= (Atom "i") && msg2 /= (Atom "i") then fst else snd
 
       firstfact = Fact "contains" [Comp Apply [Atom "counter", Atom "TUniqueVar"], Atom "globalcounter"]
       secondfact = Fact "contains" [Atom "TUniqueVar", Atom "globalcounter"]
-      msgstruct msg getsender getreceiver = if isappprot then [Fact "contains" [msg, Comp Apply [Atom "secCh", Comp Cat [Atom (getsender senderreceiver), Atom (getreceiver senderreceiver)]]]] else [Iknows msg] -- is removed from app3b in ruleSplit later
-      incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1 getsecchsender getsecchreceiver
-      outgoingmsg = if msg2 == (Atom "i") then [] else if step == 0 then msgstruct msg2 getsecchsender getsecchreceiver else msgstruct msg2 getsecchreceiver getsecchsender
+      msgstruct msg getsender getreceiver = if isappprot then [Fact "contains" [msg, Comp Apply [Atom setName, Comp Cat [Atom (getsender senderreceiver), Atom (getreceiver senderreceiver)]]]] else [Iknows msg] -- is removed from app3b in ruleSplit later
+      incommingmsg = if msg1 == (Atom "i") then [] else msgstruct msg1 getsetnamesender getsetnamereceiver
+      outgoingmsg = if msg2 == (Atom "i") then [] else if step == 0 then msgstruct msg2 getsetnamesender getsetnamereceiver else msgstruct msg2 getsetnamereceiver getsetnamesender
 
       sentappfact = Fact "contains" [Atom (head firstfresh), Comp Apply [Atom "sent", Comp Cat [Atom (gets senderreceiver), Atom (getc senderreceiver)]]]
       sentchfact = Fact "TEMP" [Comp Cat [Atom (gets senderreceiver), Atom (getc senderreceiver)]]
@@ -388,8 +393,8 @@ vertrulesAddSteps pts =
 --- Stage 4: Adding the initial state
 -------------------------------------
 
-vertaddInit :: Bool -> Int -> ProtocolTranslationState -> ProtocolTranslationState
-vertaddInit isappprot maxDep pts =
+vertaddInit :: Bool -> GoalType -> Int -> ProtocolTranslationState -> ProtocolTranslationState
+vertaddInit isappprot goaltype maxDep pts =
   let (_, typdec, knowledge, _, _, _) = protocol pts
       args = options pts
       absInit = getinitials (rules pts) knowledge
@@ -406,7 +411,13 @@ vertaddInit isappprot maxDep pts =
           ++ ik0
           ++ (getCrypto agents0)
       agents = ((++) ["i", "A", "B"]) agents0
-      addedtypes = if isappprot then printTypes [(Function, ["sent", "secCh"])] else printTypes [(Set, ["opened", "closed"])] ++ printTypes [(Function, ["secCh"])]
+
+      setName
+        | goaltype == Secc = "secCh"
+        | goaltype == Auth = "authCh"
+        | otherwise = error "This cannot happen!"
+
+      addedtypes = if isappprot then printTypes [(Function, ["sent", setName])] else printTypes [(Set, ["opened", "closed"])] ++ printTypes [(Function, [setName])]
       addedcounter = createGlobalCounter maxDep "counter"
       addeddummy = "state_dummy(dummy,1,0).\n"
    in pts
@@ -587,15 +598,15 @@ getTypes :: Protocol -> Types
 getTypes (_, t, _, _, _, _) = t
 
 -- <paolo>
-vertruleList :: Bool -> Bool -> ProtocolTranslationState -> String
-vertruleList if2cif isappprot pts =
+vertruleList :: Bool -> Bool -> GoalType -> ProtocolTranslationState -> String
+vertruleList if2cif isappprot goaltype pts =
   -- pass the list of SQNs
-  ruleListIF (initial pts, rules pts, goals pts) (trTypes2Ids (getTypes (protocol pts)) SeqNumber) if2cif isappprot
+  ruleListIF (initial pts, rules pts, goals pts) (trTypes2Ids (getTypes (protocol pts)) SeqNumber) if2cif isappprot goaltype
 
-ruleListIF :: (String, [Rule], String) -> [Ident] -> Bool -> Bool -> String
+ruleListIF :: (String, [Rule], String) -> [Ident] -> Bool -> Bool -> GoalType -> String
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ init ++ "\n" ++ foldr (\a s ->(ppRule IF a ++"\n") ++s ) ""  rules) False = undefined
 -- ruleListIF (init,rules) _ _ | trace ("ruleListIF\n" ++ foldr (\a s ->show a ++ (ppRule IF a ++"\n") ++s ) ""  rules) False = undefined -- debug for --vert
-ruleListIF (init, rules, goals) sqns if2cif isappprot =
+ruleListIF (init, rules, goals) sqns if2cif isappprot goaltype =
   let ruleIF [] _ _ = ""
       ruleIF (x : xs) (n, name) lastrulenr =
         let -- rule hacked SQN
@@ -607,11 +618,12 @@ ruleListIF (init, rules, goals) sqns if2cif isappprot =
             appliednr2 = ppRule IF nr2
             stepname = if isappprot then if n == 0 || n == 1 then "i" else "app" else "ch"
             rulenr = if isappprot then if n == 0 || n == 1 then n + 5 else n + 1 else if n == 0 then -1 else if n == 1 then lastrulenr else n + 1
-            stepnameonly = if rulenr == -1 then "chnew" else if isappprot then stepname ++ (show rulenr) else stepname ++ (show rulenr) ++ (name)
-            stepandnr = "step " ++ stepnameonly
-            iknowspart = if (isappprot && n /= 0) || rulenr == -1 then ".\niknows(" ++ stepnameonly ++ ")\n\n" else "\n\n"
-         in stepandnr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr)
-   in init ++ (ruleIF (ruleSplit rules isappprot) (0, "a") (getlastrulenr rules)) ++ "\n" ++ goals
+            authaddendum = if goaltype == Auth && stepname == "i" && rulenr == 5 then "3" else ""
+            namenr = if rulenr == -1 then "chnew" else if isappprot then stepname ++ authaddendum ++ (show rulenr) else stepname ++ (show rulenr) ++ (name)
+            stepandnamenr = "step " ++ namenr
+            iknowspart = if (isappprot && n /= 0) || rulenr == -1 then ".\niknows(" ++ namenr ++ ")\n\n" else "\n\n"
+         in stepandnamenr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr)
+   in init ++ (ruleIF (ruleSplit rules isappprot goaltype) (0, "a") (getlastrulenr rules)) ++ "\n" ++ goals
 
 getlastrulenr rules = length rules + 3 -- OBS: is this legal?
 
@@ -642,11 +654,12 @@ replaceatomfactlist ident replacement [] = []
 -- replaceatomfactlist ident replacement (fact : facts) | trace ("replaceatomfactlist " ++ ident ++ " " ++ replacement ++ "\n" ++ (show fact)) False = undefined
 replaceatomfactlist ident replacement (fact : facts) = replaceatomfact ident replacement fact : replaceatomfactlist ident replacement facts
 
-ruleSplit :: [Rule] -> Bool -> [Rule]
+ruleSplit :: [Rule] -> Bool -> GoalType -> [Rule]
 -- ruleSplit rules | trace ("ruleSplit\n" ++ show (last ((\(l,_,_,_) -> l) (head rules)))) False = undefined
-ruleSplit rules False =
+ruleSplit rules False goaltype =
   -- ch
   let (l, eq, eqid, r) = head rules
+      ch3a = (l1, eq, [], r1)
       payloadident = head eqid
       append a [] = [a]
       append a (x : xs) = x : append a xs
@@ -667,11 +680,18 @@ ruleSplit rules False =
         Fact "TEMP" _ -> e1 : e2 : xs
         _ -> x : replacetemp xs [e1, e2]
       replacetemp _ _ = error "ruleSplit: cannot use internal function 'replacetemp' with elem list of length other than 2!"
-      secchfact = Fact "contains" [Atom payloadident, Comp Apply [Atom "secCh", Comp Cat [Atom (fst ab), Atom (snd ab)]]]
-      chopenedpart = [Fact "contains" [Atom payloadident, Atom "opened"], secchfact]
-      chclosedpart = [Fact "contains" [Atom payloadident, Atom "closed"], secchfact]
+
+      setName
+        | goaltype == Secc = "secCh"
+        | goaltype == Auth = "authCh"
+        | otherwise = error "This cannot happen!"
+
+      setnamefact = Fact "contains" [Atom payloadident, Comp Apply [Atom setName, Comp Cat [Atom (fst ab), Atom (snd ab)]]]
+      chopenedpart = [Fact "contains" [Atom payloadident, Atom "opened"], setnamefact]
+      chclosedpart = [Fact "contains" [Atom payloadident, Atom "closed"], setnamefact]
       r1 = replacetemp r chopenedpart
       r2 = replacetemp r chclosedpart
+      ch3b = (l2, eq, [], r2)
 
       (l', eq', equid', r') = head (tail rules)
       iknowspart = lastelem l'
@@ -680,6 +700,8 @@ ruleSplit rules False =
       r'' = (append iknowspart r')
       r3 = replacetemp r'' chopenedpart
       r4 = replacetemp r'' chclosedpart
+      ch4a = (l3, eq', equid', r3)
+      ch4b = (l4, eq', equid', r4)
 
       dummy_state = State "dummy" [(Atom "dummy", Atom "dummy"), (Atom "0", Atom "0"), (Atom "SID", Atom "SID")]
       firstfact = Fact "contains" [Comp Apply [Atom "counter", Atom "TUniqueVar"], Atom "globalcounter"]
@@ -688,23 +710,25 @@ ruleSplit rules False =
       closedpart = Fact "contains" [Atom payloadident, Atom "closed"]
       iknowspayload = Iknows (Atom payloadident)
 
-      stepnew = ([dummy_state, firstfact], [], [payloadident], [dummy_state, secondfact, closedpart])
-      step5a = ([dummy_state, firstfact, openedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
-      step5b = ([dummy_state, firstfact, closedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
-   in [stepnew, step5a, step5b, (l1, eq, [], r1), (l2, eq, [], r2), (l3, eq', equid', r3), (l4, eq', equid', r4)]
-ruleSplit rules True =
+      chnew = ([dummy_state, firstfact], [], [payloadident], [dummy_state, secondfact, closedpart])
+      ch5a = ([dummy_state, firstfact, openedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
+      ch5b = ([dummy_state, firstfact, closedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
+   in [chnew, ch5a, ch5b, ch3a, ch3b, ch4a, ch4b]
+ruleSplit rules True goaltype =
   -- app
-  let (l, eq, eqid, r) = head (tail rules)
+  let app3 = head rules
+      (l, eq, eqid, r) = head (tail rules)
       (l2, eq2, eqid2, r2) = head (tail (tail rules))
       lastelem [] = error "ruleSplit: cannot use internal function 'lastelem' on empty list!"
       lastelem (elem : []) = elem
       lastelem (x : xs) = lastelem xs
-      keepinsecch = lastelem l
+      keepinsetname = lastelem l
       macscrtapply = lastelem r
 
       append a [] = [a]
       append a (x : xs) = x : append a xs
-      r' = append keepinsecch r
+      r' = append keepinsetname r
+      app4 = (l, eq, eqid, r')
 
       removelastelem [] = error "ruleSplit: cannot use internal function 'removelastelem' on empty list!"
       removelastelem [_] = []
@@ -712,19 +736,25 @@ ruleSplit rules True =
       replacelastelem elem listt = append elem (removelastelem listt)
       l2' = replacelastelem macscrtapply l2
       r2' = append macscrtapply r2
+      app5 = (l2', eq2, eqid2, r2')
 
       dummy_state = State "dummy" [(Atom "dummy", Atom "dummy"), (Atom "0", Atom "0"), (Atom "SID", Atom "SID")]
       firstfact = Fact "contains" [Comp Apply [Atom "counter", Atom "TUniqueVar"], Atom "globalcounter"]
       secondfact = Fact "contains" [Atom "TUniqueVar", Atom "globalcounter"]
 
-      secchpart frst sndd = Fact "contains" [Atom "Xxx", Comp Apply [Atom "secCh", Comp Cat [Atom frst, Atom sndd]]]
-      i5secchpart = secchpart "Yyy" "i"
-      i6secchpart = secchpart "i" "Yyy"
+      setName
+        | goaltype == Secc = "secCh"
+        | goaltype == Auth = "authCh"
+        | otherwise = error "This cannot happen!"
+
+      setnamepart frst sndd = Fact "contains" [Atom "Xxx", Comp Apply [Atom setName, Comp Cat [Atom frst, Atom sndd]]]
+      i5setnamepart = if goaltype == Secc then setnamepart "Yyy" "i" else setnamepart "Yyy" "Zzz"
+      i6setnamepart = setnamepart "i" "Yyy"
       iknowspart = Iknows (Atom "Xxx")
 
-      stepi5 = ([dummy_state, firstfact, i5secchpart], [], [], [dummy_state, secondfact, i5secchpart, iknowspart])
-      stepi6 = ([dummy_state, firstfact, iknowspart], [], [], [dummy_state, secondfact, i6secchpart])
-   in [stepi5, stepi6, head rules, (l, eq, eqid, r'), (l2', eq2, eqid2, r2')]
+      i5 = ([dummy_state, firstfact, i5setnamepart], [], [], [dummy_state, secondfact, i5setnamepart, iknowspart])
+      i6 = ([dummy_state, firstfact, iknowspart], [], [], [dummy_state, secondfact, i6setnamepart])
+   in [i5, i6, app3, app4, app5]
 
 ppRuleIF2CIF :: Rule -> Rule
 -- ppRuleIF2CIF r | trace ("ppRuleIF2CIF\n\tr: " ++ ppRule IF r) False = undefined
@@ -808,16 +838,16 @@ vertendstr noowngoal =
     ++ "    secret(AnB_M,AnB_A).\n"
     ++ "    iknows(AnB_M)\n"
 
-vertmakegoals :: Bool -> ProtocolTranslationState -> ProtocolTranslationState
+vertmakegoals :: Bool -> GoalType -> ProtocolTranslationState -> ProtocolTranslationState
 -- vertmakegoals isappprot pts | trace ("vertmakegoals\n" ++ (show (ruleSplit (rules pts) isappprot))) False = undefined
-vertmakegoals False pts =
+vertmakegoals False goaltype pts =
   -- ch
   let lasttwoelems [] = error "vertmakegoals: cannot use internal function 'lasttwoelems' on empty list!"
       lasttwoelems [_] = error "vertmakegoals: cannot use internal function 'lasttwoelems' on list with only one element!"
       lasttwoelems [x1, x2] = [x1, x2]
       lasttwoelems (x : xs) = lasttwoelems xs
 
-      vertrules = ruleSplit (rules pts) False
+      vertrules = ruleSplit (rules pts) False goaltype
       chgoalrules = lasttwoelems vertrules
 
       getfactlist :: [Rule] -> [[Fact]]
@@ -829,11 +859,16 @@ vertmakegoals False pts =
       removesndelem listt = head listt : tail (tail listt)
       chgoalnoglobalcounter = map removesndelem chgoalfacts
 
+      setName
+        | goaltype == Secc = "secCh"
+        | goaltype == Auth = "authCh"
+        | otherwise = error "This cannot happen!"
+
       applynot :: String -> Fact -> String
       applynot output fact =
         let trueoutput = (if output == "" then "" else output ++ ".\n")
          in case fact of
-              Fact "contains" [Atom _, Comp Apply [Atom "secCh", _]] -> trueoutput ++ "    not(" ++ ppFactListBetter IF [fact] ++ ")"
+              Fact "contains" [Atom _, Comp Apply [Atom setName, _]] -> trueoutput ++ "    not(" ++ ppFactListBetter IF [fact] ++ ")"
               f -> trueoutput ++ "    " ++ ppFactListBetter IF [fact]
 
       attacknr = getlastrulenr (rules pts) + 2
@@ -851,7 +886,7 @@ vertmakegoals False pts =
 
       chgoal3 = "  attack_state closed_leak:=\n" ++ sndfacttogoalbody (head (tail chgoalnoglobalcounter))
    in pts {goals = "section attack_states:\n" ++ chgoal1 ++ chgoal2 ++ chgoal3}
-vertmakegoals True pts =
+vertmakegoals True goaltype pts =
   -- app
   let (l, eq, eqid, r) = head (rules pts)
       thirdelem listt = head (tail (tail listt))
@@ -864,7 +899,7 @@ vertmakegoals True pts =
       lastelem (elem : []) = elem
       lastelem (x : xs) = lastelem xs
 
-      vertrules = ruleSplit (rules pts) True
+      vertrules = ruleSplit (rules pts) True goaltype
       appgoalrules = lastelem vertrules
 
       removesnd listt = head listt : tail (tail listt)

@@ -76,8 +76,10 @@ tokens :-
   "TUniqueVar" { (\p s -> TUNIQVAR p)}
   "Xxx" { (\p s -> TUNIQVARX p)}
   "Yyy" { (\p s -> TUNIQVARY p)}
+  "Zzz" { (\p s -> TUNIQVARZ p)}
   "sent" { (\p s -> TSETSENT p)}
   "secCh" { (\p s -> TSETSECCH p)}
+  "authCh" { (\p s-> TSETAUTHCH p)}
   "opened" { (\p s -> TSETOPENED p)}
   "closed" { (\p s -> TSETCLOSED p)}
   "TEMP" { (\p s -> TTEMP p)}
@@ -130,8 +132,10 @@ data Token=
    | TUNIQVAR AlexPosn
    | TUNIQVARX AlexPosn
    | TUNIQVARY AlexPosn
+   | TUNIQVARZ AlexPosn
    | TSETSENT AlexPosn
    | TSETSECCH AlexPosn
+   | TSETAUTHCH AlexPosn
    | TSETOPENED AlexPosn
    | TSETCLOSED AlexPosn
    | TTEMP AlexPosn
@@ -178,8 +182,10 @@ token_posn (TGLOBAL p)=p
 token_posn (TUNIQVAR p)=p
 token_posn (TUNIQVARX p)=p
 token_posn (TUNIQVARY p)=p
+token_posn (TUNIQVARZ p)=p
 token_posn (TSETSENT p)=p
 token_posn (TSETSECCH p)=p
+token_posn (TSETAUTHCH p)=p
 token_posn (TSETOPENED p)=p
 token_posn (TSETCLOSED p)=p
 token_posn (TTEMP p)=p
