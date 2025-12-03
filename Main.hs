@@ -15,6 +15,7 @@ All Rights Reserved.
 
 import AnBOnP
 import AnBmain
+import CheckComposition (newcheckcompositionmain)
 import Constants
 import Control.Concurrent
 import Data.Char
@@ -43,7 +44,8 @@ usage =
   "usage: ofmc [<OPTIONS>] <INPUT FILE>\n"
     ++ "Options:\n"
     ++ "  --numSess <INT>  specify the number of sessions (for an AnB spec)\n"
-    ++ "  --vert           (for AnB files only:) interpret protocol as an app or ch protocol"
+    ++ "  --vert           (for AnB files only:) interpret protocol as an app or ch protocol (cannot use with --comp)"
+    ++ "  --comp <AnBFile> (for AnB files only:) determine if input protocol can be composed with the specified file (cannot use with --vert)"
     ++ "  --of IF          (for AnB files only:) do not check, but produce AVISPA IF\n"
     ++ "  --of Isa         (for AnB files only:) generate a fixedpoint proof for Isabelle-OFMC\n"
     ++ "  --of AVANTSSAR   print result in AVANTSSAR Output Format\n"
@@ -209,7 +211,8 @@ data OptsAndPars = OnP
     exec :: Bool,
     fileout :: Maybe String,
     attacktrace :: Bool,
-    all_in :: Bool
+    all_in :: Bool,
+    compfile :: Maybe String
   }
 
 parseArgs :: [String] -> (OptsAndPars, AnBOptsAndPars)
@@ -236,7 +239,8 @@ parseArgs (x : xs) =
           exec = False,
           fileout = Nothing,
           attacktrace = False,
-          all_in = False
+          all_in = False,
+          compfile = Nothing
         },
       AnBOnP
         { anbfilename = "", -- actually not used at all (use filename of main options set)
@@ -300,7 +304,12 @@ parseArgs0 ("--vert" : xs) (onp, anbonp) =
   let dep = depth onp
       maxDep = maxDepth anbonp
       newDepth = if isNothing dep && isNothing maxDep then vertGlobalCounterDepth else fromJust dep
-   in parseArgs0 xs (onp, anbonp {vert = True, maxDepth = Just newDepth})
+      throwError = compfile onp /= Nothing
+   in parseArgs0 xs (onp, anbonp {vert = True, maxDepth = if not throwError then Just newDepth else error "Cannot use both --vert and --comp!"})
+parseArgs0 ("--comp" : xs) (onp, anbonp) =
+  let isAnB = isSuffixOf ".ANB" (map toUpper $ (debughead "at parseArg") xs)
+      throwError = vert anbonp /= False
+   in parseArgs0 (tail xs) (onp {compfile = if throwError then error "Cannot use both --vert and --comp!" else if isAnB then Just (debughead "at parseArg" xs) else error "Can only check if composition is possible for AnB files! Use --comp <file.AnB> instead!"}, anbonp)
 parseArgs0 ("-typed" : xs) (onp, anbonp) =
   parseArgs0 xs (onp, anbonp {typed = True})
 parseArgs0 ("--of" : "FP" : xs) (onp, anbonp) =
@@ -432,33 +441,39 @@ mainWithArgs (onp, anbonp) (brothers :: Maybe ((MVar Result, MVar Result))) iter
             then do
               str <- readFile (filename onp)
               return (newanbmain str (anbonp {outt = IF}))
-            else do
-              str <- readFile (filename onp)
-              verify <- return (newanbmain str anbonp)
-              ( if isSafe verify
-                  then
-                    let result = verified ((authlevel anbonp) == Weak) (filename onp)
-                     in if isJust brothers
-                          then do
-                            putMVar (fst (fromJust brothers)) dummyresult
-                            putMVar (snd (fromJust brothers)) result
-                            x <- newEmptyMVar
-                            takeMVar x
-                            return ""
-                          else do
-                            putStr (showresult result (outt anbonp == AVANTSSAR))
-                            exitWith ExitSuccess
-                            return ""
-                  else
-                    if (outt anbonp) == IF
-                      then do
-                        putStr verify
-                        exitWith ExitSuccess
+            else
+              if compfile onp /= Nothing
+                then do
+                  filestr1 <- readFile (filename onp)
+                  filestr2 <- readFile (fromJust (compfile onp))
+                  return (newcheckcompositionmain filestr1 filestr2 anbonp)
+                else do
+                  str <- readFile (filename onp)
+                  verify <- return (newanbmain str anbonp)
+                  ( if isSafe verify
+                      then
+                        let result = verified ((authlevel anbonp) == Weak) (filename onp)
+                         in if isJust brothers
+                              then do
+                                putMVar (fst (fromJust brothers)) dummyresult
+                                putMVar (snd (fromJust brothers)) result
+                                x <- newEmptyMVar
+                                takeMVar x
+                                return ""
+                              else do
+                                putStr (showresult result (outt anbonp == AVANTSSAR))
+                                exitWith ExitSuccess
+                                return ""
                       else
-                        if (outt anbonp) == Isa
-                          then error "??"
-                          else error ("***" ++ verify ++ "***\n")
-                )
+                        if (outt anbonp) == IF
+                          then do
+                            putStr verify
+                            exitWith ExitSuccess
+                          else
+                            if (outt anbonp) == Isa
+                              then error "??"
+                              else error ("***" ++ verify ++ "***\n")
+                    )
         else
           readFile (filename onp)
     t0 <- getCPUTime
