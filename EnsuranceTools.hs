@@ -2,6 +2,7 @@ module EnsuranceTools where
 
 import AnBOnP
 import Ast
+import Debug.Trace
 
 isAppProtocol :: Actions -> Bool
 isAppProtocol [] = False
@@ -33,6 +34,7 @@ getGoalType goals =
           x -> error ("Protocol has the wrong goaltype " ++ show x ++ "!\nExpected ((AGENT1,False,Nothing),X,(AGENT2,False,Nothing)), where X = FreshSecure, FreshAuthentic")
 
 throwIfVertErrors :: Protocol -> Bool
+-- throwIfVertErrors protocol@(_, _, _, _, actions, goals) | trace ("isApp: " ++ show (isAppProtocol actions) ++ ", length of actions: " ++ show (length actions)) False = undefined
 throwIfVertErrors protocol@(_, _, _, _, actions, goals) =
   let isApp = isAppProtocol actions
       (isCompliant, numActions) = if isApp then isAppCompliant actions else isChCompliant actions
