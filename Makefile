@@ -1,6 +1,6 @@
 DIRS = cj/6.1-Sym-Key-no-TTP cj/6.2-Auth-CCF cj/6.3-Sym-Key-TTp cj/6.6-Pub-Key-no-TTP cj/6.7-6.9-Pub-Key-TTP classic/
 
-SRCFILES = AnBmain.hs FPTranslator.hs AnBOnP.hs Msg.hs LMsg.hs MsgPat.hs AnBParser.y Lexer.x Ast.hs NewIfLexer.x TheoLexer.x TheoParser.y Constants.hs IntsOnly.hs Decomposition.hs MsgTree.hs Remola.hs Symbolic.hs NewIfParser.y Search.hs TheoLoad.hs PrettyUgly.hs Main.hs Translator.hs If2Horn.hs ProtocolTranslationTypes.hs VertTranslator.hs PaoloTranslator.hs CheckComposition.hs EnsuranceTools.hs
+SRCFILES = AnBmain.hs FPTranslator.hs AnBOnP.hs Msg.hs LMsg.hs MsgPat.hs AnBParser.y Lexer.x Ast.hs NewIfLexer.x TheoLexer.x TheoParser.y Constants.hs IntsOnly.hs Decomposition.hs MsgTree.hs Remola.hs Symbolic.hs NewIfParser.y Search.hs TheoLoad.hs PrettyUgly.hs Main.hs Translator.hs If2Horn.hs VertTranslator.hs CheckComposition.hs EnsuranceTools.hs
 
 GENERATED = NewIfLexer.hs NewIfParser.hs TheoLexer.hs TheoParser.hs Lexer.hs AnBParser.hs
 

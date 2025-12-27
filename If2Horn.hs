@@ -23,8 +23,6 @@ import FPTranslator
 import Msg
 import NewIfLexer
 import NewIfParser
-import PaoloTranslator
-import ProtocolTranslationTypes
 import Translator
 
 if2horn :: PProt -> HornRep

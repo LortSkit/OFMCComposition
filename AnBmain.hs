@@ -22,7 +22,6 @@ import Data.Maybe
 import EnsuranceTools
 import FPTranslator
 import Lexer
-import ProtocolTranslationTypes
 import Translator
 import VertTranslator
 
