@@ -15,7 +15,7 @@ All Rights Reserved.
 
 import AnBOnP
 import AnBmain
-import CheckComposition (newcheckcompositionmain)
+import CheckComposition (ComposableResult (Composable, Uncomposable), newcheckcompositionmain)
 import Constants
 import Control.Concurrent
 import Data.Char
@@ -193,6 +193,14 @@ showresult result printbackend =
                    ++ "\n"
                else ""
            )
+
+showComposableResult :: (ComposableResult, [String], [String], [String]) -> String
+showComposableResult (res, pub, sec, faults) =
+  let explanation = if res == Composable then "" else "\nEXPLANATION: Inability to prove type-flaw resistance due to overlapping msg structures in the following message pairs:"
+      outputpub = if res == Composable then "\nPub: " ++ show pub else ""
+      outpubsec = if res == Composable then "\nSec: " ++ show sec else ""
+      outputfaults = if res == Composable then "" else "\n" ++ show faults
+   in "COMPOSABILITY RESULT: " ++ show res ++ explanation ++ outputpub ++ outpubsec ++ outputfaults
 
 data OptsAndPars = OnP
   { filename :: String,
@@ -446,7 +454,9 @@ mainWithArgs (onp, anbonp) (brothers :: Maybe ((MVar Result, MVar Result))) iter
                 then do
                   filestr1 <- readFile (filename onp)
                   filestr2 <- readFile (fromJust (compfile onp))
-                  return (newcheckcompositionmain filestr1 filestr2 anbonp)
+                  putStr (showComposableResult (newcheckcompositionmain filestr1 filestr2 anbonp))
+                  exitWith ExitSuccess
+                  return ""
                 else do
                   str <- readFile (filename onp)
                   verify <- return (newanbmain str anbonp)

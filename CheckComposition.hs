@@ -1,6 +1,3 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
-{-# HLINT ignore "Use tuple-section" #-}
 module CheckComposition where
 
 import AnBOnP
@@ -16,76 +13,80 @@ import EnsuranceTools
 import Lexer
 import Msg
 
-trycompose :: Protocol -> Protocol -> AnBOptsAndPars -> String
--- trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) _ | trace ("1:\n" ++ show (getBasePubSec typdec1 knowledge1) ++ "\n2:\n" ++ show (getBasePubSec typdec2 knowledge2)) False = undefined
-trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) _ | trace ("Types:" ++ show typdec2 ++ "\nAlso:" ++ show (getBasePubSec typdec1 knowledge1) ++ "\nOutput: " ++ show (getFinalPubSec (getBasePubSec typdec1 knowledge1) (getBasePubSec typdec2 knowledge2) (actions1, actions2))) False = undefined
+data ComposableResult = Composable | Uncomposable
+  deriving (Eq, Show)
+
+trycompose :: Protocol -> Protocol -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String])
 trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args =
   let noErrors = not (allErrors protocol1 protocol2)
       stuff1 = getBasePubSec typdec1 knowledge1
       stuff2 = getBasePubSec typdec2 knowledge2
       (pub, sec) = getFinalPubSec stuff1 stuff2 (actions1, actions2)
-      typeflawresresult = typeflawresistancecheck (actions1, actions2) (goals1, goals2) (typdec1, typdec2)
+      (typeflawresresult, compterms, compsetops, faults) = typeflawresistancecheck (actions1, actions2) (goals1, goals2) (typdec1, typdec2)
+      msgtupletostring (x, y) = "(" ++ getStringFromMsg x ++ "," ++ getStringFromMsg y ++ ")"
+      msgtupletostringforfaults (x, y) = "{" ++ getStringFromMsg x ++ "; " ++ getStringFromMsg y ++ "}"
+      finalsec = sec ++ map getStringFromMsg compterms ++ map msgtupletostring compsetops
+      finalfaults = map msgtupletostringforfaults faults
+      result = if typeflawresresult then Composable else Uncomposable
    in if noErrors
-        then (if typeflawresresult then show (pub, sec) else error "SHOULD RETURN INSTEAD OF ERROR: These two protocols are not vertically composable!")
-        else error "This is unreachable!" -- TODO: Actually return meaningful variable
+        then (result, pub, finalsec, finalfaults)
+        else error "This is unreachable!"
 
 -------------------------------------PUB SEC STUFF-------------------------------------
 
-__msgStrListToCommaSepStrip :: [String] -> String
-__msgStrListToCommaSepStrip [] = ""
-__msgStrListToCommaSepStrip [msg] = msg
-__msgStrListToCommaSepStrip (msg : msgs) = msg ++ "," ++ __msgStrListToCommaSepStrip msgs
+msgStrListToCommaSepStrip :: [String] -> String
+msgStrListToCommaSepStrip [] = ""
+msgStrListToCommaSepStrip [msg] = msg
+msgStrListToCommaSepStrip (msg : msgs) = msg ++ "," ++ msgStrListToCommaSepStrip msgs
 
-__getStringFromAtom :: Msg -> String
-__getStringFromAtom msg = case msg of
+getStringFromMsg :: Msg -> String
+getStringFromMsg msg = case msg of
   Atom x -> x
-  Comp Apply msgs -> __getStringFromAtom (head msgs) ++ "(" ++ __msgStrListToCommaSepStrip (map __getStringFromAtom (tail msgs)) ++ ")"
-  Comp Cat msgs -> __msgStrListToCommaSepStrip (map __getStringFromAtom msgs)
-  Comp Crypt msgs -> "crypt(" ++ __msgStrListToCommaSepStrip (map __getStringFromAtom (tail msgs)) ++ ")"
-  Comp Scrypt msgs -> "scrypt(" ++ __msgStrListToCommaSepStrip (map __getStringFromAtom (tail msgs)) ++ ")"
-  Comp Exp msgs -> "exp(" ++ __msgStrListToCommaSepStrip (map __getStringFromAtom msgs) ++ ")"
-  Comp Xor msgs -> "xor(" ++ __msgStrListToCommaSepStrip (map __getStringFromAtom msgs) ++ ")"
-  Comp Inv msgs -> "inv(" ++ __msgStrListToCommaSepStrip (map __getStringFromAtom msgs) ++ ")"
-  _ -> error ("Internal function '__getStringFromAtom' got an unexpected composed message! " ++ show msg)
+  Comp Apply msgs -> getfuncString (head msgs) (tail msgs)
+  Comp Cat msgs -> msgStrListToCommaSepStrip (map getStringFromMsg msgs)
+  Comp Crypt msgs -> "crypt(" ++ getStringFromMsg (head msgs) ++ ", " ++ msgStrListToCommaSepStrip (map getStringFromMsg (tail msgs)) ++ ")"
+  Comp Scrypt msgs -> "scrypt(" ++ getStringFromMsg (head msgs) ++ ", " ++ msgStrListToCommaSepStrip (map getStringFromMsg (tail msgs)) ++ ")"
+  Comp Exp msgs -> "exp(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
+  Comp Xor msgs -> "xor(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
+  Comp Inv msgs -> "inv(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
+  _ -> error ("Internal function 'getStringFromMsg' got an unexpected composed message! " ++ show msg)
 
-_getfuncString :: Msg -> [Msg] -> String
-_getfuncString funcname msgs = __getStringFromAtom funcname ++ "(" ++ __msgStrListToCommaSepStrip (map __getStringFromAtom msgs) ++ ")"
+getfuncString :: Msg -> [Msg] -> String
+getfuncString funcname msgs = getStringFromMsg funcname ++ "(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
 
 removeDuplicates [] = []
 removeDuplicates (a : as) = if a `elem` as then removeDuplicates as else a : removeDuplicates as
 
-getFinalPubSec :: ([String], [String], ([String], [String])) -> ([String], [String], ([String], [String])) -> (Actions, Actions) -> (([String], [String]), ([String], [String]))
+getFinalPubSec :: ([String], [String], ([String], [String])) -> ([String], [String], ([String], [String])) -> (Actions, Actions) -> ([String], [String])
 -- getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, actions2) | trace ("Actions: " ++ show actions2) False = undefined
 getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, actions2) =
-  let __isAnyInSec :: [([String], [String], String)] -> (Bool, String)
-      -- __isAnyInSec ((pub, sec, lastadded) : stuff) | trace (if length sec > 0 && lastadded == head sec then "pub: " ++ show pub ++ ", sec: " ++ show sec ++ ", lastadded: " ++ lastadded else "") False = undefined
-      __isAnyInSec [] = (False, "")
-      __isAnyInSec ((pub, sec, lastadded) : stuff) = if length sec > 0 && lastadded == head sec then (True, lastadded) else __isAnyInSec stuff
+  let isAnyInSec :: [([String], [String], String)] -> (Bool, String)
+      isAnyInSec [] = (False, "")
+      isAnyInSec ((pub, sec, lastadded) : stuff) = if length sec > 0 && lastadded == head sec then (True, lastadded) else isAnyInSec stuff
 
-      ___combinepubsec :: [([String], [String], String)] -> ([String], [String], String)
-      ___combinepubsec [] = ([], [], "")
-      ___combinepubsec ((pub, sec, lastadded) : stuff) =
-        let (currpub, currsec, _) = ___combinepubsec stuff
+      combinepubsec :: [([String], [String], String)] -> ([String], [String], String)
+      combinepubsec [] = ([], [], "")
+      combinepubsec ((pub, sec, lastadded) : stuff) =
+        let (currpub, currsec, _) = combinepubsec stuff
          in (pub ++ currpub, sec ++ currsec, "")
 
-      __combinepubseccorrectlastadded :: [([String], [String], String)] -> Bool -> String -> ([String], [String])
-      __combinepubseccorrectlastadded stuff isSec lastadded =
-        let (combinedpub, combinedsec, _) = ___combinepubsec stuff
+      combinepubseccorrectlastadded :: [([String], [String], String)] -> Bool -> String -> ([String], [String])
+      combinepubseccorrectlastadded stuff isSec lastadded =
+        let (combinedpub, combinedsec, _) = combinepubsec stuff
             (correctpub, correctedsec) =
               if isSec
                 then (combinedpub, lastadded : (filter (\x -> x /= lastadded) combinedsec))
                 else (lastadded : (filter (\x -> x /= lastadded) combinedpub), combinedsec)
          in (correctpub, correctedsec)
 
-      __fstInTriple :: ([String], [String], String) -> [String]
       __fstInTriple (x, _, _) = x
 
-      _getMsgSubterms :: Msg -> ([String], [String], String)
-      _getMsgSubterms msg = case msg of
+      getMsgSubterms :: Msg -> ([String], [String], String)
+      getMsgSubterms msg = case msg of
         Atom x -> if x `elem` pub1 || x `elem` pub2 then ([x], [], x) else ([], [x], x)
         Comp Apply (funcname : msgs) ->
-          let (currpub, currsec, lastadded) = _getMsgSubterms (head msgs) -- assuming here that the next message is a Comp Cat [stuff,stuff]
-              tobeadded = _getfuncString funcname msgs
+          let (currpub, currsec, lastadded) = getMsgSubterms (head msgs) -- assuming here that the next message is a Comp Cat [stuff,stuff]
+              tobeadded = getfuncString funcname msgs
               isObviouslyPub = tobeadded `elem` pub1 || tobeadded `elem` pub2
               isObviouslySec = tobeadded `elem` fst sec1 || tobeadded `elem` snd sec1 || tobeadded `elem` fst sec2 || tobeadded `elem` snd sec2
               insidePub = head currpub == lastadded
@@ -96,29 +97,29 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
                     then (currpub, tobeadded : currsec, tobeadded)
                     else (currpub, currsec, lastadded)
         Comp Cat msgs ->
-          let pubseclastaddedlist = map _getMsgSubterms msgs
-              (isSec, lastadded) = __isAnyInSec pubseclastaddedlist
+          let pubseclastaddedlist = map getMsgSubterms msgs
+              (isSec, lastadded) = isAnyInSec pubseclastaddedlist
               actuallastadded = if isSec then lastadded else head (__fstInTriple (head pubseclastaddedlist))
-              (currpub, currsec) = __combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
+              (currpub, currsec) = combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
            in (currpub, currsec, actuallastadded)
         Comp Exp msgs ->
-          let pubseclastaddedlist = map _getMsgSubterms msgs
-              (isSec, lastadded) = __isAnyInSec pubseclastaddedlist
+          let pubseclastaddedlist = map getMsgSubterms msgs
+              (isSec, lastadded) = isAnyInSec pubseclastaddedlist
               actuallastadded = if isSec then lastadded else head (__fstInTriple (head pubseclastaddedlist))
-              (currpub, currsec) = __combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
-              expstring = _getfuncString (Atom "exp") msgs
+              (currpub, currsec) = combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
+              expstring = getfuncString (Atom "exp") msgs
            in (currpub, expstring : currsec, expstring)
         Comp Xor msgs ->
-          let pubseclastaddedlist = map _getMsgSubterms msgs
-              (isSec, lastadded) = __isAnyInSec pubseclastaddedlist
+          let pubseclastaddedlist = map getMsgSubterms msgs
+              (isSec, lastadded) = isAnyInSec pubseclastaddedlist
               actuallastadded = if isSec then lastadded else head (__fstInTriple (head pubseclastaddedlist))
-              (currpub, currsec) = __combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
-              xorstring = _getfuncString (Atom "xor") msgs
+              (currpub, currsec) = combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
+              xorstring = getfuncString (Atom "xor") msgs
            in (currpub, xorstring : currsec, xorstring)
         Comp op [Comp Apply (keyname : keyinputs), innermsg]
           | op `elem` [Scrypt, Crypt] ->
-              let (currpub, currsec, lastadded) = _getMsgSubterms innermsg
-                  keystring = _getfuncString keyname keyinputs
+              let (currpub, currsec, lastadded) = getMsgSubterms innermsg
+                  keystring = getfuncString keyname keyinputs
                   invkeystring = "inv(" ++ keystring ++ ")"
                   opname =
                     let (firstchar : restofstring) = show op
@@ -127,29 +128,29 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
                in (currpub, tobeadded : currsec ++ [keystring, invkeystring], tobeadded)
         Comp op [Comp Inv [Comp Apply (keyname : keyinputs)], innermsg]
           | op `elem` [Scrypt, Crypt] ->
-              let (currpub, currsec, lastadded) = _getMsgSubterms innermsg
-                  keystring = _getfuncString keyname keyinputs
+              let (currpub, currsec, lastadded) = getMsgSubterms innermsg
+                  keystring = getfuncString keyname keyinputs
                   invkeystring = "inv(" ++ keystring ++ ")"
                   opname =
                     let (firstchar : restofstring) = show op
                      in toLower firstchar : restofstring
                   tobeadded = opname ++ "(" ++ keystring ++ "," ++ lastadded ++ ")"
                in (currpub, tobeadded : currsec ++ [keystring, invkeystring], tobeadded)
-        _ -> error ("Internal function '_getMsgSubterms' got an unexpected composed message! " ++ show msg)
+        _ -> error ("Internal function 'getMsgSubterms' got an unexpected composed message! " ++ show msg)
 
-      _actionToMsg :: Action -> Msg
-      _actionToMsg (((sender, _, _), _, (receiver, _, _)), msg, _, _) = msg
+      actionToMsg :: Action -> Msg
+      actionToMsg (((sender, _, _), _, (receiver, _, _)), msg, _, _) = msg
 
       getActionsSubterms :: Actions -> ([String], [String], String)
       getActionsSubterms [] = ([], [], "")
       getActionsSubterms actions =
-        let msgs = map _actionToMsg actions
-            pubseclist = map _getMsgSubterms msgs
-            (pub, sec, _) = ___combinepubsec pubseclist
+        let msgs = map actionToMsg actions
+            pubseclist = map getMsgSubterms msgs
+            (pub, sec, _) = combinepubsec pubseclist
          in (pub, sec, "")
       (opub1, osec1, _) = getActionsSubterms actions1
       (opub2, osec2, _) = getActionsSubterms actions2
-   in ((removeDuplicates opub1, removeDuplicates opub2), (removeDuplicates osec1, removeDuplicates osec2))
+   in (removeDuplicates opub1 ++ removeDuplicates opub2, removeDuplicates osec1 ++ removeDuplicates osec2)
 
 getBasePubSec :: Types -> Knowledge -> ([String], [String], ([String], [String]))
 getBasePubSec types knowledge =
@@ -162,10 +163,10 @@ getBasePubSec types knowledge =
       getFlatTypes [] = []
       getFlatTypes ((_, flats) : ts) = flats ++ getFlatTypes ts
 
-      __getFlatKnowledge :: Knowledge -> [Msg]
-      __getFlatKnowledge ([], _) = []
-      __getFlatKnowledge ((_, msgs) : ks, _) = msgs ++ _getFlatKnowledge (ks, [])
-      _getFlatKnowledge knowledge = removeDuplicates (__getFlatKnowledge knowledge)
+      _getFlatKnowledge :: Knowledge -> [Msg]
+      _getFlatKnowledge ([], _) = []
+      _getFlatKnowledge ((_, msgs) : ks, _) = msgs ++ getFlatKnowledge (ks, [])
+      getFlatKnowledge knowledge = removeDuplicates (_getFlatKnowledge knowledge)
 
       _getKnowledgeAtomComp :: [Msg] -> ([String], [(String, String)])
       _getKnowledgeAtomComp [] = ([], [])
@@ -173,10 +174,10 @@ getBasePubSec types knowledge =
         Atom x -> concatTupleFst x (_getKnowledgeAtomComp msgs)
         Comp Apply othermsgs ->
           let recursiveBit = (_getKnowledgeAtomComp msgs)
-              fstBit = __getStringFromAtom (head othermsgs)
-              sndBit = __getStringFromAtom (head (tail othermsgs))
+              fstBit = getStringFromMsg (head othermsgs)
+              sndBit = getStringFromMsg (head (tail othermsgs))
            in concatTupleSnd (fstBit, sndBit) recursiveBit
-      getKnowledgeAtomComp knowledge = _getKnowledgeAtomComp (_getFlatKnowledge knowledge)
+      getKnowledgeAtomComp knowledge = _getKnowledgeAtomComp (getFlatKnowledge knowledge)
 
       atomCompToString :: (String, String) -> String
       atomCompToString (funcname, concatedmsgs) = funcname ++ "(" ++ concatedmsgs ++ ")"
@@ -232,7 +233,7 @@ getABFromActions _ = error "Ch protocol has an incorrect number of actions! Exac
 
 listOverlap :: (Eq a) => [a] -> [a] -> Bool
 listOverlap [] _ = False
-listOverlap (id : restids) addedIdents = id `elem` addedIdents || listOverlap restids addedIdents
+listOverlap (id : restids) addedIdents = (id `elem` addedIdents) || listOverlap restids addedIdents
 
 -- TODO: Better handeling of overlap? Example, if A is agent in both, then that's probably fine?
 getIdTypeList :: Bool -> (Types, Types) -> [Ident] -> [(Ident, Type)]
@@ -240,11 +241,11 @@ getIdTypeList firstIsApp ([], []) addedIdents = []
 getIdTypeList firstIsApp ([], (typ, ids) : resttypes) addedIdents
   | listOverlap ids addedIdents = error "App protocol and Ch protocol share variable names! Please make sure there is no overlap!"
   | not firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ ids)
-  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp ([], resttypes) (if typ /= Function && typ /= Format then addedIdents ++ ids else addedIdents)
+  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ ids)
 getIdTypeList firstIsApp ((typ, ids) : resttypes, types2) addedIdents
   | listOverlap ids addedIdents = error "App protocol and Ch protocol share variable names! Please make sure there is no overlap!"
   | firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ ids)
-  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp (resttypes, types2) (if typ /= Function && typ /= Format then addedIdents ++ ids else addedIdents)
+  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ ids)
 
 tryEasyLookup :: Bool -> (Types, Types) -> Ident -> Maybe Type
 tryEasyLookup firstIsApp (types1, types2) id =
@@ -314,9 +315,15 @@ getsubtermsofmsg msg =
                 then error "Unexpected key structure!"
                 else
                   if hasUndesirableMsgStructure encrypted
-                    then error "Unexpected encryption body structure!"
+                    then msg : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
                     else msg : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-            _ -> msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+            _ ->
+              if hasUndesirableMsgStructure key
+                then error "Unexpected key structure!"
+                else
+                  if hasUndesirableMsgStructure encrypted
+                    then msg : Comp Inv [key] : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                    else msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
           _ -> error "Unexpected structure encountered!"
         Scrypt -> case msgs of
           [key, encrypted] -> case key of
@@ -325,9 +332,15 @@ getsubtermsofmsg msg =
                 then error "Unexpected key structure!"
                 else
                   if hasUndesirableMsgStructure encrypted
-                    then error "Unexpected encryption body structure!"
+                    then msg : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
                     else msg : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-            _ -> msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+            _ ->
+              if hasUndesirableMsgStructure key
+                then error "Unexpected key structure!"
+                else
+                  if hasUndesirableMsgStructure encrypted
+                    then msg : Comp Inv [key] : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                    else msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
           _ -> error "Unexpected structure encountered!"
         Cat -> case msgs of
           [Comp Cat _, _] -> error "Unexpected concatenation structure encountered!"
@@ -437,7 +450,7 @@ tryunify firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 =
                 then error ("Unhandled exception: Expected list of length 1 in internal function 'tryunify', got length " ++ show (length msgs2))
                 else tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
 
-typeflawresistancecheck :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> Bool
+typeflawresistancecheck :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> (Bool, [Msg], [(Msg, Msg)], [(Msg, Msg)])
 -- typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) | trace ("omgwtfseriously: " ++ show (isAppProtocol actions1) ++ " " ++ show (if isAppProtocol actions1 then types1 else types2)) False = undefined
 typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
   let firstIsApp = isAppProtocol actions1
@@ -452,53 +465,59 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
       chmsg3 = getMsgFromAction (if firstIsApp then head actions2 else head actions1)
       chprotSet = if chgoaltype == Secc then Atom "secCh" else Atom "authCh"
       --------------------------FROM FORMAL PROTOCOLS--------------------------
+      compterms =
+        [ -- appprotN, -- N
+          -- appprotS, -- S
+          -- appprotC, -- C
+          applysent appprotS appprotC, -- sent(S,C)
+          applyoutbox appprotS appprotC, -- outbox(S,C)
+          applyinbox appprotS appprotC, -- inbox(S,C)
+          applyoutbox appprotC appprotS, -- outbox(C,S)
+          applyinbox appprotC appprotS, -- inbox(C,S)
+          applyinbox appproti appprotS, -- inbox(i,S)
+          applysent appprotS appproti, -- sent(S,i)
+          -- chprotX, -- X
+          -- chprotA, -- A
+          -- chprotB, -- B
+          applyoutbox chprotA chprotB, -- outbox(A,B)
+          applychprotSet chprotA chprotB, -- secCh(A,B) [OR authCh(A,B)]
+          applyinbox chprotA chprotB -- inbox(A,B)
+        ]
+      compsetops =
+        [ (appprotN, applysent appprotS appprotC), -- N->sent(S,C) && N<-sent(S,C)
+          (appmsg1, applyoutbox appprotS appprotC), -- [m1]->outbox(S,C)
+          (appmsg1, applyinbox appprotS appprotC), -- [m1]<-inbox(S,C)
+          (appmsg2, applyoutbox appprotC appprotS), -- [m2]->outbox(C,S)
+          (appmsg2, applyinbox appprotC appprotS), -- [m2]<-inbox(C,S)
+          (appmsg2, applyinbox appproti appprotS), -- [m2]<-inbox(i,S)
+          (appprotN, applysent appprotS appproti), -- N \in sent(S,i)
+          (chprotX, applyoutbox chprotA chprotB), -- X<-outbox(A,B)
+          (chprotX, applychprotSet chprotA chprotB), -- wsw X->secCh(A,B) && X \in secCh(A,B) && X \notin secCh(A,B) [OR authCh -||-]
+          (chprotX, applyinbox chprotA chprotB) -- x->inbox(A,B)
+        ]
       appproti = Atom "i"
       applyoutbox agent1 agent2 = Comp Apply [Atom "outbox", Comp Cat [agent1, agent2]]
       applyinbox agent1 agent2 = Comp Apply [Atom "inbox", Comp Cat [agent1, agent2]]
       applysent agent1 agent2 = Comp Apply [Atom "sent", Comp Cat [agent1, agent2]]
       applychprotSet agent1 agent2 = Comp Apply [chprotSet, Comp Cat [agent1, agent2]]
-      -- compterms =
-      --   [ appprotN, -- N
-      --     appprotS, -- S
-      --     appprotC, -- C
-      --     applysent appprotS appprotC, -- sent(S,C)
-      --     applyoutbox appprotS appprotC, -- outbox(S,C)
-      --     applyinbox appprotS appprotC, -- inbox(S,C)
-      --     applyoutbox appprotC appprotS, -- outbox(C,S)
-      --     applyinbox appprotC appprotS, -- inbox(C,S)
-      --     applyinbox appproti appprotS, -- inbox(i,S)
-      --     applysent appprotS appproti, -- sent(S,i)
-      --     chprotX, -- X
-      --     chprotA, -- A
-      --     chprotB, -- B
-      --     applyoutbox chprotA chprotB, -- outbox(A,B)
-      --     applychprotSet chprotA chprotB, -- secCh(A,B) [OR authCh(A,B)]
-      --     applyinbox chprotA chprotB -- inbox(A,B)
-      --   ]
-      -- compsetops =
-      --   [ (appprotN, applysent appprotS appprotC), -- N->sent(S,C) && N<-sent(S,C)
-      --     (appmsg1, applyoutbox appprotS appprotC), -- [m1]->outbox(S,C)
-      --     (appmsg1, applyinbox appprotS appprotC), -- [m1]<-inbox(S,C)
-      --     (appmsg2, applyoutbox appprotC appprotS), -- [m2]->outbox(C,S)
-      --     (appmsg2, applyinbox appprotC appprotS), -- [m2]<-inbox(C,S)
-      --     (appmsg2, applyinbox appproti appprotS), -- [m2]<-inbox(i,S)
-      --     (appprotN, applysent appprotS appproti), -- N \in sent(S,i)
-      --     (chprotX, applyoutbox chprotA chprotB), -- X<-outbox(A,B)
-      --     (chprotX, applychprotSet chprotA chprotB), -- X->secCh(A,B) && X \in secCh(A,B) && X \notin secCh(A,B) [OR authCh -||-]
-      --     (chprotX, applyinbox chprotA chprotB) -- x->inbox(A,B)
-      --   ]
-      appmsg1AndSubterms = removeDuplicates (appmsg1 : getsubtermsofmsg appmsg1)
-      appmsg2AndSubterms = removeDuplicates (appmsg2 : getsubtermsofmsg appmsg2)
-      chmsg3AndSubterms = removeDuplicates (chmsg3 : getsubtermsofmsg chmsg3)
+      getMsgAndSubterms msg =
+        if hasUndesirableMsgStructure msg
+          then removeDuplicates (getsubtermsofmsg msg)
+          else msg : removeDuplicates (getsubtermsofmsg msg)
+      appmsg1AndSubterms = getMsgAndSubterms appmsg1
+      appmsg2AndSubterms = getMsgAndSubterms appmsg2
+      chmsg3AndSubterms = getMsgAndSubterms chmsg3
       allMsgs = removeDuplicates (appmsg1AndSubterms ++ appmsg2AndSubterms ++ chmsg3AndSubterms) -- trace ("Seriously, wtf? chmsg3: " ++ show chmsg3AndSubterms)
-      assemblyLine :: [Msg] -> [Msg] -> [Maybe Bool]
+      assemblyLine :: [Msg] -> [Msg] -> [(Maybe Bool, Msg, Msg)]
       assemblyLine [] [] = []
       assemblyLine (currChecking : rest) [] = if (length rest) == 0 then [] else assemblyLine rest (tail rest)
-      assemblyLine (currChecking : rest) (h : t) = tryunify firstIsApp (types1, types2) (actions1, actions2) currChecking h : assemblyLine (currChecking : rest) t
+      assemblyLine (currChecking : rest) (h : t) = (tryunify firstIsApp (types1, types2) (actions1, actions2) currChecking h, currChecking, h) : assemblyLine (currChecking : rest) t
 
       tobechecked = assemblyLine allMsgs (tail allMsgs) -- trace ("Seriously, wtf? Allmsgs: " ++ show allMsgs) -- ++ assemblyLine allMsgs compterms)
-      result = foldl (\b mbool -> if mbool /= Just False && b /= False then b else False) True tobechecked -- trace ("Seriously, wtf? " ++ show tobechecked)
-   in result
+      -- result = foldl (\b (mbool, _, _) -> if mbool /= Just False && b /= False then b else False) True tobechecked -- trace ("Seriously, wtf? " ++ show tobechecked)
+      faults = map (\(_, x, y) -> (x, y)) (filter (\(mbool, _, _) -> mbool == Just False) tobechecked)
+      result = length faults == 0
+   in (result, compterms, compsetops, faults)
 
 -------------------------------------OTHER STUFF-------------------------------------
 
@@ -527,6 +546,6 @@ allErrors protocol1@(_, _, _, _, actions1, goals1) protocol2@(_, _, _, _, action
                 then error ("The two input protocols do not agree on their goals! OFMC input has goaltype " ++ show goalType1 ++ " and --comp input has goaltype " ++ show goalType2)
                 else False
 
-newcheckcompositionmain :: String -> String -> AnBOptsAndPars -> String
+newcheckcompositionmain :: String -> String -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String])
 newcheckcompositionmain filestr1 filestr2 otp =
   trycompose (anbparser (alexScanTokens filestr1)) (anbparser (alexScanTokens filestr2)) otp
