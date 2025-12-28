@@ -42,6 +42,7 @@ module Msg
     ppIdList,
     ppMsg,
     ppMsgList,
+    ppMsgListAnds,
     ppXList,
     match0,
     isAtype,
@@ -82,6 +83,7 @@ data Operator
   | Pseudonym
   | AuthChan
   | ConfChan
+  | Neq -- only for use with --vert flag!
   deriving (Eq, Show)
 
 -- | THE main data type...
@@ -356,6 +358,7 @@ synthesizable0 ik m =
       Comp Pseudonym _ -> False
       Comp AuthChan _ -> True
       Comp ConfChan _ -> True
+      Comp Neq _ -> True -- only for use with --vert flag!
       Comp (Userdef _) _ -> error ("Not yet supported: " ++ (show m))
       Comp Xor list ->
         (all (synthesizable ik) list)
@@ -441,6 +444,7 @@ analysis0 =
               Comp Pseudonym _ -> pop
               Comp AuthChan _ -> pop
               Comp ConfChan _ -> pop
+              Comp Neq _ -> pop
               Comp Xor ms ->
                 if (length ik) > 200
                   then
@@ -600,8 +604,21 @@ ppMsg ot (Comp f xs) =
     Pseudonym -> ppMsg ot (Comp Apply (Atom "pseudonym" : xs))
     AuthChan -> ppMsg ot (Comp Apply (Atom "authChCr" : xs))
     ConfChan -> ppMsg ot (Comp Apply (Atom "confChCr" : xs))
-
--- _ -> error "Forgot to write pretty printer for "++(show f) -- no I actually did not
+    -- _ -> error "Forgot to write pretty printer for "++(show f) -- no I actually did not
+    Neq -> case length xs of
+      2 ->
+        case ot of
+          IF ->
+            let a' = head xs
+                b' = head (tail xs)
+             in case a' of
+                  Atom ida -> case b' of
+                    Atom idb -> ida ++ "/=" ++ idb
+                    _ -> error "Use of neq should only be between two Atoms!"
+                  _ -> error "Use of neq should only be between two Atoms!"
+          Pretty -> error "Idk what i'm doing, but it's part of the --vert flag!"
+          Isa -> error "Idk what i'm doing, but it's part of the --vert flag!"
+          _ -> error "Neq only works with two elements!"
 
 -- | remove the Cat-operator from a message (return the list of concatenated messages).
 deCat (Comp Cat ms) = ms
@@ -619,6 +636,11 @@ ppMsgList ot list =
   case ot of
     Isa -> ppXList (ppMsg ot) "," (filter firstorder list)
     _ -> ppXList (ppMsg ot) "," list
+
+ppMsgListAnds ot list =
+  case ot of
+    IF -> ppXList (ppMsg ot) " " (filter firstorder list)
+    _ -> error "& facts only supported in IF!"
 
 firstorder (Comp Apply [Atom "typeFun", _]) = False
 firstorder _ = True
