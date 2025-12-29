@@ -23,7 +23,6 @@ import Data.Array (elems)
 import Data.List
 import Data.Maybe
 import Debug.Trace
-import LMsg
 import LMsg (LMsg)
 import Msg
 import MsgPat
