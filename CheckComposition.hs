@@ -82,61 +82,55 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
       __fstInTriple (x, _, _) = x
 
       getMsgSubterms :: Msg -> ([String], [String], String)
-      getMsgSubterms msg = case msg of
-        Atom x -> if x `elem` pub1 || x `elem` pub2 then ([x], [], x) else ([], [x], x)
-        Comp Apply (funcname : msgs) ->
-          let (currpub, currsec, lastadded) = getMsgSubterms (head msgs) -- assuming here that the next message is a Comp Cat [stuff,stuff]
-              tobeadded = getfuncString funcname msgs
-              isObviouslyPub = tobeadded `elem` pub1 || tobeadded `elem` pub2
-              isObviouslySec = tobeadded `elem` fst sec1 || tobeadded `elem` snd sec1 || tobeadded `elem` fst sec2 || tobeadded `elem` snd sec2
-              insidePub = head currpub == lastadded
-           in if isObviouslyPub
-                then (tobeadded : currpub, currsec, tobeadded)
-                else
-                  if isObviouslySec || not insidePub
-                    then (currpub, tobeadded : currsec, tobeadded)
-                    else (currpub, currsec, lastadded)
-        Comp Cat msgs ->
-          let pubseclastaddedlist = map getMsgSubterms msgs
-              (isSec, lastadded) = isAnyInSec pubseclastaddedlist
-              actuallastadded = if isSec then lastadded else head (__fstInTriple (head pubseclastaddedlist))
-              (currpub, currsec) = combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
-           in (currpub, currsec, actuallastadded)
-        Comp Exp msgs ->
-          let pubseclastaddedlist = map getMsgSubterms msgs
-              (isSec, lastadded) = isAnyInSec pubseclastaddedlist
-              actuallastadded = if isSec then lastadded else head (__fstInTriple (head pubseclastaddedlist))
-              (currpub, currsec) = combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
-              expstring = getfuncString (Atom "exp") msgs
-           in (currpub, expstring : currsec, expstring)
-        Comp Xor msgs ->
-          let pubseclastaddedlist = map getMsgSubterms msgs
-              (isSec, lastadded) = isAnyInSec pubseclastaddedlist
-              actuallastadded = if isSec then lastadded else head (__fstInTriple (head pubseclastaddedlist))
-              (currpub, currsec) = combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
-              xorstring = getfuncString (Atom "xor") msgs
-           in (currpub, xorstring : currsec, xorstring)
-        Comp op [Comp Apply (keyname : keyinputs), innermsg]
-          | op `elem` [Scrypt, Crypt] ->
-              let (currpub, currsec, lastadded) = getMsgSubterms innermsg
-                  keystring = getfuncString keyname keyinputs
-                  invkeystring = "inv(" ++ keystring ++ ")"
+      getMsgSubterms msg =
+        let cryptScryptcase op keystring innermsg =
+              let invkeystring = "inv(" ++ keystring ++ ")"
+                  (currpub, currsec, lastadded) = getMsgSubterms innermsg
                   opname =
                     let (firstchar : restofstring) = show op
                      in toLower firstchar : restofstring
                   tobeadded = opname ++ "(" ++ keystring ++ "," ++ lastadded ++ ")"
                in (currpub, tobeadded : currsec ++ [keystring, invkeystring], tobeadded)
-        Comp op [Comp Inv [Comp Apply (keyname : keyinputs)], innermsg]
-          | op `elem` [Scrypt, Crypt] ->
-              let (currpub, currsec, lastadded) = getMsgSubterms innermsg
-                  keystring = getfuncString keyname keyinputs
-                  invkeystring = "inv(" ++ keystring ++ ")"
+            catExpXorcase op msgs =
+              let pubseclastaddedlist = map getMsgSubterms msgs
+                  (isSec, lastadded) = isAnyInSec pubseclastaddedlist
+                  actuallastadded = if isSec then lastadded else head (__fstInTriple (head pubseclastaddedlist))
+                  (currpub, currsec) = combinepubseccorrectlastadded pubseclastaddedlist isSec actuallastadded
                   opname =
                     let (firstchar : restofstring) = show op
                      in toLower firstchar : restofstring
-                  tobeadded = opname ++ "(" ++ keystring ++ "," ++ lastadded ++ ")"
-               in (currpub, tobeadded : currsec ++ [keystring, invkeystring], tobeadded)
-        _ -> error ("Internal function 'getMsgSubterms' got an unexpected composed message! " ++ show msg)
+                  funcstring = getfuncString (Atom opname) msgs
+               in if opname == "cat"
+                    then (currpub, currsec, actuallastadded)
+                    else (currpub, funcstring : currsec, funcstring)
+         in case msg of
+              Atom x -> if x `elem` pub1 || x `elem` pub2 then ([x], [], x) else ([], [x], x)
+              Comp Apply (funcname : msgs) ->
+                let (currpub, currsec, lastadded) = getMsgSubterms (head msgs) -- assuming here that the next message is a Comp Cat [stuff,stuff]
+                    tobeadded = getfuncString funcname msgs
+                    isObviouslyPub = tobeadded `elem` pub1 || tobeadded `elem` pub2
+                    isObviouslySec = tobeadded `elem` fst sec1 || tobeadded `elem` snd sec1 || tobeadded `elem` fst sec2 || tobeadded `elem` snd sec2
+                    insidePub = head currpub == lastadded
+                 in if isObviouslyPub
+                      then (tobeadded : currpub, currsec, tobeadded)
+                      else
+                        if isObviouslySec || not insidePub
+                          then (currpub, tobeadded : currsec, tobeadded)
+                          else (currpub, currsec, lastadded)
+              Comp op msgs | op `elem` [Cat, Exp, Xor] -> catExpXorcase op msgs
+              Comp op [key, innermsg]
+                | op `elem` [Scrypt, Crypt] ->
+                    case key of
+                      Atom k ->
+                        let keystring = k
+                         in cryptScryptcase op keystring innermsg
+                      Comp Apply (keyname : keyinputs) ->
+                        let keystring = getfuncString keyname keyinputs
+                         in cryptScryptcase op keystring innermsg
+                      Comp Inv [Comp Apply (keyname : keyinputs)] ->
+                        let keystring = getfuncString keyname keyinputs
+                         in cryptScryptcase op keystring innermsg
+              _ -> error ("Internal function 'getMsgSubterms' got an unexpected composed message! " ++ show msg)
 
       actionToMsg :: Action -> Msg
       actionToMsg (((sender, _, _), _, (receiver, _, _)), msg, _, _) = msg
@@ -290,165 +284,125 @@ unrollCat msg =
         else error ("Expected concatenation, instead got " ++ show msg)
 
 hasUndesirableMsgStructure :: Msg -> Bool
-hasUndesirableMsgStructure msg =
-  case msg of
-    Atom _ -> True
-    Comp op _ -> case op of
-      Cat -> True
-      Userdef func1 -> error "I have no idea how this error was triggered..."
-      Pseudonym -> error "Unreachable!"
-      AuthChan -> error "Unreachable!"
-      ConfChan -> error "Unreachable!"
-      Neq -> error "Unreachable!"
-      _ -> False
+hasUndesirableMsgStructure msg = isCat msg || isAtom msg
 
 getsubtermsofmsg :: Msg -> [Msg]
 getsubtermsofmsg msg =
-  case msg of
-    Atom _ -> []
-    Comp op msgs ->
-      case op of
-        Crypt -> case msgs of
-          [key, encrypted] -> case key of
-            Comp Inv _ ->
-              if hasUndesirableMsgStructure key
-                then error "Unexpected key structure!"
-                else
-                  if hasUndesirableMsgStructure encrypted
-                    then msg : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                    else msg : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-            _ ->
-              if hasUndesirableMsgStructure key
-                then error "Unexpected key structure!"
-                else
-                  if hasUndesirableMsgStructure encrypted
-                    then msg : Comp Inv [key] : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                    else msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-          _ -> error "Unexpected structure encountered!"
-        Scrypt -> case msgs of
-          [key, encrypted] -> case key of
-            Comp Inv _ ->
-              if hasUndesirableMsgStructure key
-                then error "Unexpected key structure!"
-                else
-                  if hasUndesirableMsgStructure encrypted
-                    then msg : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                    else msg : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-            _ ->
-              if hasUndesirableMsgStructure key
-                then error "Unexpected key structure!"
-                else
-                  if hasUndesirableMsgStructure encrypted
-                    then msg : Comp Inv [key] : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                    else msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-          _ -> error "Unexpected structure encountered!"
-        Cat -> case msgs of
-          [Comp Cat _, _] -> error "Unexpected concatenation structure encountered!"
-          [elem, Comp Cat nextmsgs] ->
-            if hasUndesirableMsgStructure elem
-              then getsubtermsofmsg elem ++ getsubtermsofmsg (Comp Cat nextmsgs)
-              else elem : getsubtermsofmsg elem ++ getsubtermsofmsg (Comp Cat nextmsgs)
-          [elem1, elem2] ->
-            if hasUndesirableMsgStructure elem1 && hasUndesirableMsgStructure elem2
-              then getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+  let cryptScryptcase msg msgs = case msgs of
+        [key, encrypted] -> case key of
+          Comp Inv _ ->
+            if isCat key
+              then error "Unexpected key structure!"
               else
-                if hasUndesirableMsgStructure elem1
-                  then elem2 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+                if isAtom key
+                  then
+                    if hasUndesirableMsgStructure encrypted
+                      then msg : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                      else msg : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
                   else
-                    if hasUndesirableMsgStructure elem2
-                      then elem1 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
-                      else elem1 : elem2 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
-          l ->
-            if length l >= 3 && noCats l
-              then filter (not . hasUndesirableMsgStructure) l ++ concat (map getsubtermsofmsg l)
-              else error ("Expected concatenation, instead got " ++ show msg)
-        Inv ->
-          if length msgs /= 1
-            then error "Unexpected Inv structure encountered!"
-            else getsubtermsofmsg (head msgs)
-        Exp ->
-          if length msgs /= 1
-            then error "Unexpected Exp structure encountered!"
-            else getsubtermsofmsg (head msgs)
-        Xor ->
-          if length msgs /= 1
-            then error "Unexpected Xor structure encountered!"
-            else getsubtermsofmsg (head msgs)
-        Apply ->
-          if length msgs /= 2
-            then error "Unexpected function structure encountered!"
-            else getsubtermsofmsg (head (tail msgs))
-        Userdef func1 -> error "I have no idea how this error was triggered..."
-        Pseudonym -> error "Unreachable!"
-        AuthChan -> error "Unreachable!"
-        ConfChan -> error "Unreachable!"
-        Neq -> error "Unreachable!"
+                    if hasUndesirableMsgStructure encrypted
+                      then msg : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                      else msg : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+          _ ->
+            if isCat key
+              then error "Unexpected key structure!"
+              else
+                if isAtom key
+                  then
+                    if hasUndesirableMsgStructure encrypted
+                      then msg : Comp Inv [key] : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                      else msg : Comp Inv [key] : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                  else
+                    if hasUndesirableMsgStructure encrypted
+                      then msg : Comp Inv [key] : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                      else msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+        _ -> error "Unexpected structure encountered!"
+      invExpXorcase op msgs =
+        if length msgs /= 1
+          then error ("Unexpected " ++ show op ++ "structure encountered!")
+          else getsubtermsofmsg (head msgs)
+   in case msg of
+        Atom _ -> []
+        Comp op msgs ->
+          case op of
+            Crypt -> cryptScryptcase msg msgs
+            Scrypt -> cryptScryptcase msg msgs
+            Cat -> case msgs of
+              [Comp Cat _, _] -> error "Unexpected concatenation structure encountered!"
+              [elem, Comp Cat nextmsgs] ->
+                if hasUndesirableMsgStructure elem
+                  then getsubtermsofmsg elem ++ getsubtermsofmsg (Comp Cat nextmsgs)
+                  else elem : getsubtermsofmsg elem ++ getsubtermsofmsg (Comp Cat nextmsgs)
+              [elem1, elem2] ->
+                if hasUndesirableMsgStructure elem1 && hasUndesirableMsgStructure elem2
+                  then getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+                  else
+                    if hasUndesirableMsgStructure elem1
+                      then elem2 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+                      else
+                        if hasUndesirableMsgStructure elem2
+                          then elem1 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+                          else elem1 : elem2 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+              l ->
+                if length l >= 3 && noCats l
+                  then filter (not . hasUndesirableMsgStructure) l ++ concat (map getsubtermsofmsg l)
+                  else error ("Expected concatenation, instead got " ++ show msg)
+            op | op `elem` [Inv, Exp, Xor] -> invExpXorcase op msgs
+            Apply ->
+              if length msgs /= 2
+                then error "Unexpected function structure encountered!"
+                else getsubtermsofmsg (head (tail msgs))
+            Userdef func1 -> error "I have no idea how this error was triggered..."
+            _ -> error "Unreachable!" -- Pseudonym, AuthChan, ConfChan, Neq
 
 tryunify :: Bool -> (Types, Types) -> (Actions, Actions) -> Msg -> Msg -> Maybe Bool
 tryunify firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 =
-  case msg1 of
-    Atom id1 -> case msg2 of
-      Atom id2 -> Just (tryEasyLookup firstIsApp (types1, types2) id1 == tryEasyLookup firstIsApp (types1, types2) id2)
-      Comp op msgs ->
-        if firstIsApp && tryEasyLookup firstIsApp (types1, types2) id1 == Just Payload && msg2 `elem` map getMsgFromAction actions1
-          then Just True
-          else
-            if not firstIsApp && tryEasyLookup firstIsApp (types1, types2) id1 == Just Payload && msg2 `elem` map getMsgFromAction actions2
-              then Just True
-              else Nothing
-    Comp op1 msgs1 -> case msg2 of
-      Atom id2 ->
-        if firstIsApp && tryEasyLookup firstIsApp (types1, types2) id2 == Just Payload && msg1 `elem` map getMsgFromAction actions1
-          then Just True
-          else
-            if not firstIsApp && tryEasyLookup firstIsApp (types1, types2) id2 == Just Payload && msg1 `elem` map getMsgFromAction actions2
-              then Just True
-              else Nothing
-      Comp op2 msgs2 ->
-        if not (matchableOperators op1 op2)
-          then Nothing
-          else case op1 of
-            Crypt ->
-              let keyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
-                  bodyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head (tail msgs1)) (head (tail msgs2))
-               in if isNothing keyRecursion
-                    then Nothing
-                    else
-                      if keyRecursion == Just False
+  let compAtomPaircase id msg
+        | firstIsApp && tryEasyLookup firstIsApp (types1, types2) id == Just Payload && msg `elem` map getMsgFromAction actions1 = Just True
+        | not firstIsApp && tryEasyLookup firstIsApp (types1, types2) id == Just Payload && msg `elem` map getMsgFromAction actions2 = Just True
+        | otherwise = Nothing
+      invExpXorcase msgs1 msgs2 =
+        if length msgs1 /= 1 || length msgs2 /= 1
+          then error ("Unhandled exception: Expected list of length 1 in internal function 'tryunify', got length " ++ show (length msgs2))
+          else tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
+      cryptScryptcase msgs1 msgs2 =
+        let keyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
+            bodyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head (tail msgs1)) (head (tail msgs2))
+         in if isNothing keyRecursion
+              then Nothing
+              else
+                if keyRecursion == Just False
+                  then Just False
+                  else bodyRecursion
+   in case msg1 of
+        Atom id1 -> case msg2 of
+          Atom id2 -> Just (tryEasyLookup firstIsApp (types1, types2) id1 == tryEasyLookup firstIsApp (types1, types2) id2)
+          Comp op msgs ->
+            compAtomPaircase id1 msg2
+        Comp op1 msgs1 -> case msg2 of
+          Atom id2 ->
+            compAtomPaircase id2 msg1
+          Comp op2 msgs2 ->
+            if not (matchableOperators op1 op2)
+              then Nothing
+              else case op1 of
+                op | op `elem` [Crypt, Scrypt] -> cryptScryptcase msgs1 msgs2
+                Cat ->
+                  let firstunroll = unrollCat msg1
+                      secondunroll = unrollCat msg2
+                      zipped = zip firstunroll secondunroll
+                      unifications = map (uncurry (tryunify firstIsApp (types1, types2) (actions1, actions2))) zipped
+                   in if length firstunroll /= length secondunroll
                         then Just False
-                        else bodyRecursion
-            Scrypt ->
-              let keyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
-                  bodyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head (tail msgs1)) (head (tail msgs2))
-               in if isNothing keyRecursion
-                    then Nothing
-                    else
-                      if keyRecursion == Just False
-                        then Just False
-                        else bodyRecursion
-            Cat ->
-              let firstunroll = unrollCat msg1
-                  secondunroll = unrollCat msg2
-                  zipped = zip firstunroll secondunroll
-                  unifications = map (uncurry (tryunify firstIsApp (types1, types2) (actions1, actions2))) zipped
-               in if length firstunroll /= length secondunroll
-                    then Just False
-                    else
-                      foldl (\mb elem -> if elem /= Just False && mb /= Just False then mb else Just False) (Just True) unifications
-            Apply ->
-              let b = head msgs1 /= head msgs2
-                  recursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head (tail msgs1)) (head (tail msgs2))
-               in if b then Nothing else if recursion /= Just True then Just False else recursion
-            Userdef func1 -> error "I have no idea how this error was triggered..."
-            Pseudonym -> error "Unreachable!"
-            AuthChan -> error "Unreachable!"
-            ConfChan -> error "Unreachable!"
-            Neq -> error "Unreachable!"
-            _ ->
-              -- Inv, Exp, Xor
-              if length msgs1 /= 1 || length msgs2 /= 1
-                then error ("Unhandled exception: Expected list of length 1 in internal function 'tryunify', got length " ++ show (length msgs2))
-                else tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
+                        else
+                          foldl (\mb elem -> if elem /= Just False && mb /= Just False then mb else Just False) (Just True) unifications
+                op | op `elem` [Inv, Exp, Xor] -> invExpXorcase msgs1 msgs2
+                Apply ->
+                  let b = head msgs1 /= head msgs2
+                      recursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head (tail msgs1)) (head (tail msgs2))
+                   in if b then Nothing else if recursion /= Just True then Just False else recursion
+                Userdef func1 -> error "I have no idea how this error was triggered..."
+                _ -> error "Unreachable!" -- Pseudonym, AuthChan, ConfChan, Neq
 
 typeflawresistancecheck :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> (Bool, [Msg], [(Msg, Msg)], [(Msg, Msg)])
 -- typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) | trace ("omgwtfseriously: " ++ show (isAppProtocol actions1) ++ " " ++ show (if isAppProtocol actions1 then types1 else types2)) False = undefined
