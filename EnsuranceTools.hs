@@ -2,7 +2,6 @@ module EnsuranceTools where
 
 import AnBOnP
 import Ast
-import Debug.Trace
 
 isAppProtocol :: Actions -> Bool
 isAppProtocol [] = False

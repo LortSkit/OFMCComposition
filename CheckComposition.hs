@@ -2,9 +2,7 @@ module CheckComposition where
 
 import AnBOnP
 import AnBParser
-import AnBmain
 import Ast
-import Control.Arrow (Arrow (first))
 import Data.Char (isLower, toLower, toUpper)
 import Data.List
 import Data.Maybe (isNothing)

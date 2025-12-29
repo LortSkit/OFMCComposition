@@ -18,15 +18,11 @@ module VertTranslator where
 
 import AnBOnP
 import Ast
-import Control.Monad
-import Data.Array (elems)
 import Data.List
 import Data.Maybe
-import Debug.Trace
 import LMsg (LMsg)
 import Msg
 import MsgPat
-import Search (xexec_check)
 import Translator
 
 vertformats :: ProtocolTranslationState -> ProtocolTranslationState
