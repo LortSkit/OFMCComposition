@@ -61,6 +61,9 @@ test:
 clean: 
 	rm -f *\.hi *\.o
 
+cleanWin:
+	del /Q *.hi *.o *.txt NewIfLexer.hs NewIfParser.hs TheoLexer.hs TheoParser.hs Lexer.hs AnBParser.hs output
+
 release:	$(SRCFILES)
 	mkdir release
 	mkdir release/src
