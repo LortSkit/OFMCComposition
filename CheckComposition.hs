@@ -188,7 +188,7 @@ getMsgFromAction :: Action -> Msg
 getMsgFromAction (_, msg, _, _) = msg
 
 getNFromTypes :: Types -> Msg
--- getNFromTypes ((typ, idents) : resttypes) | trace ("Wtf?" ++ show (typ, idents)) False = undefined
+-- getNFromTypes ((typ, idents) : resttypes) | trace ("???" ++ show (typ, idents)) False = undefined
 getNFromTypes [] = error "App protocol has no nonces! Exactly one nonce is required in the App protocol!"
 getNFromTypes ((typ, idents) : resttypes) =
   case typ of
@@ -403,7 +403,7 @@ tryunify firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 =
                 _ -> error "Unreachable!" -- Pseudonym, AuthChan, ConfChan, Neq
 
 typeflawresistancecheck :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> (Bool, [Msg], [(Msg, Msg)], [(Msg, Msg)])
--- typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) | trace ("omgwtfseriously: " ++ show (isAppProtocol actions1) ++ " " ++ show (if isAppProtocol actions1 then types1 else types2)) False = undefined
+-- typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) | trace ("whatishappening: " ++ show (isAppProtocol actions1) ++ " " ++ show (if isAppProtocol actions1 then types1 else types2)) False = undefined
 typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
   let firstIsApp = isAppProtocol actions1
       chgoaltype = if firstIsApp then getGoalType goals2 else getGoalType goals1
@@ -459,14 +459,14 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
       appmsg1AndSubterms = getMsgAndSubterms appmsg1
       appmsg2AndSubterms = getMsgAndSubterms appmsg2
       chmsg3AndSubterms = getMsgAndSubterms chmsg3
-      allMsgs = removeDuplicates (appmsg1AndSubterms ++ appmsg2AndSubterms ++ chmsg3AndSubterms) -- trace ("Seriously, wtf? chmsg3: " ++ show chmsg3AndSubterms)
+      allMsgs = removeDuplicates (appmsg1AndSubterms ++ appmsg2AndSubterms ++ chmsg3AndSubterms) -- trace ("Seriously ??? chmsg3: " ++ show chmsg3AndSubterms)
       assemblyLine :: [Msg] -> [Msg] -> [(Maybe Bool, Msg, Msg)]
       assemblyLine [] [] = []
       assemblyLine (currChecking : rest) [] = if (length rest) == 0 then [] else assemblyLine rest (tail rest)
       assemblyLine (currChecking : rest) (h : t) = (tryunify firstIsApp (types1, types2) (actions1, actions2) currChecking h, currChecking, h) : assemblyLine (currChecking : rest) t
 
-      tobechecked = assemblyLine allMsgs (tail allMsgs) -- trace ("Seriously, wtf? Allmsgs: " ++ show allMsgs) -- ++ assemblyLine allMsgs compterms)
-      -- result = foldl (\b (mbool, _, _) -> if mbool /= Just False && b /= False then b else False) True tobechecked -- trace ("Seriously, wtf? " ++ show tobechecked)
+      tobechecked = assemblyLine allMsgs (tail allMsgs) -- trace ("Seriously ??? Allmsgs: " ++ show allMsgs) -- ++ assemblyLine allMsgs compterms)
+      -- result = foldl (\b (mbool, _, _) -> if mbool /= Just False && b /= False then b else False) True tobechecked -- trace ("Seriously ??? " ++ show tobechecked)
       faults = map (\(_, x, y) -> (x, y)) (filter (\(mbool, _, _) -> mbool == Just False) tobechecked)
       result = length faults == 0
    in (result, compterms, compsetops, faults)
@@ -480,7 +480,7 @@ secGSMPDisjoint protocol1@(_, types1, knowledge1, _, actions1, goals1) protocol2
    in False
 
 allErrors :: Protocol -> Protocol -> Bool
--- allErrors protocol1 protocol2 | trace ("Wtf?" ++ show (throwIfVertErrors protocol1 && throwIfVertErrors protocol2)) False = undefined
+-- allErrors protocol1 protocol2 | trace ("???" ++ show (throwIfVertErrors protocol1 && throwIfVertErrors protocol2)) False = undefined
 allErrors protocol1@(_, _, _, _, actions1, goals1) protocol2@(_, _, _, _, actions2, goals2) =
   let structureErrors = (throwIfVertErrors protocol1 || throwIfVertErrors protocol2)
       protocolTypeError = isAppProtocol actions1 == isAppProtocol actions2

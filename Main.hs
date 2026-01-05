@@ -428,9 +428,12 @@ main =
             if (isAnB onp) && ((outt anbonp) == FPI)
               then do iterativeFP (onp, anbonp {iterateFP = 7})
               else
-                if (isAnB onp) && ((numSess anbonp) == Nothing)
+                if (isAnB onp) && ((numSess anbonp) == Nothing) && compfile onp == Nothing
                   then do mainWithArgs (onp, anbonp {numSess = (Just 1)}) Nothing True
-                  else do mainWithArgs (onp, anbonp) Nothing False
+                  else
+                    if compfile onp /= Nothing
+                      then mainWithArgs (onp, anbonp {outt = IF}) Nothing False -- no clue why, but works if outt = IF ?
+                      else do mainWithArgs (onp, anbonp) Nothing False
 
 iterativeFP (onp, anbonp) =
   do

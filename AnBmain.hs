@@ -35,8 +35,8 @@ mkIF (protocol@(_, typdec, knowledge, _, actions, goals)) args =
          in if noErrors
               then
                 vertruleList (if2cif args) isApp goaltype
-                  . vertmakegoals isApp goaltype
                   . vertaddInit isApp goaltype (fromJust (maxDepth args))
+                  . vertmakegoals isApp goaltype
                   . vertrulesAddSteps
                   . vertcreateRules isApp goaltype
                   . vertformats

@@ -17,7 +17,6 @@ module Ast where
 
 import Data.List
 import Data.Maybe
-import Data.Set (Set)
 import Msg
 
 -- | The type @Protocol@ is the type for the result of the AnB-Parser,

@@ -37,7 +37,7 @@ vertformats pts =
 
 vertfAct formats ((sp@(sender, False, Nothing), ChannelProtocol, rp@(receiver, False, Nothing)), m, Nothing, Nothing) =
   ((sp, Insecure, rp), fMsg formats m, Nothing, Nothing)
-vertfAct formats ((sp@(_, _, _), ChannelProtocol, _), _, _, _) = error "Wtf? unaccounted channel protocol error encountered: -Ch-> cannot be used like this!"
+vertfAct formats ((sp@(_, _, _), ChannelProtocol, _), _, _, _) = error "Unexpected channel protocol error encountered: -Ch-> cannot be used like this!"
 vertfAct formats struct = fAct formats struct
 
 -- fChan :: (Monad m1, Monad m2) => [Ident] -> ((a1, b1, m1 Msg), b2, (a2, b3, m2 Msg)) -> ((a1, b1, m1 Msg), b2, (a2, b3, m2 Msg))
@@ -311,7 +311,7 @@ vertprintTypes =
       f (SymmetricKey, ids) = (ppIdList ids) ++ ":symmetric_key\n"
       f (Function, ids) = (ppIdList ids) ++ ":function\n"
       -------Differs from Translator.hs-------
-      f (Set, ids) = (ppIdList ids) ++ ":set\n" -- should only be used when using --vert!
+      f (Set, ids) = (ppIdList ids) ++ ":set\n"
       f (Payload, ids) = (ppIdList ids) ++ ":payload\n"
       ----------------------------------------
       f (Custom x, ids) = (ppIdList ids) ++ ":t_" ++ x ++ "\n"
