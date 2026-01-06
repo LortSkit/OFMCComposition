@@ -79,4 +79,4 @@ data AnBOptsAndPars
     if2cif :: Bool
   }
 
-data GoalType = Secc | Auth deriving (Enum, Show, Eq)
+data GoalType = Secc | Auth | Conf deriving (Enum, Show, Eq)

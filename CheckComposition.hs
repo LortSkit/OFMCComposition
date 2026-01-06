@@ -473,12 +473,6 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
 
 -------------------------------------OTHER STUFF-------------------------------------
 
-secGSMPDisjoint :: Protocol -> Protocol -> AnBOptsAndPars -> Bool
-secGSMPDisjoint protocol1@(_, types1, knowledge1, _, actions1, goals1) protocol2@(_, types2, knowledge2, _, actions2, goals2) args =
-  let gsmp_p1compp2star = [""]
-      gsmp_p1starcompp2 = [""]
-   in False
-
 allErrors :: Protocol -> Protocol -> Bool
 -- allErrors protocol1 protocol2 | trace ("???" ++ show (throwIfVertErrors protocol1 && throwIfVertErrors protocol2)) False = undefined
 allErrors protocol1@(_, _, _, _, actions1, goals1) protocol2@(_, _, _, _, actions2, goals2) =

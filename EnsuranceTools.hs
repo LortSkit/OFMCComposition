@@ -39,9 +39,5 @@ throwIfVertErrors protocol@(_, _, _, _, actions, goals) =
       (isCompliant, numActions) = if isApp then isAppCompliant actions else isChCompliant actions
       protocolType = if isApp then "App" else "Ch"
       expectedNumActions = if isApp then 2 else 1
-      goaltype = getGoalType goals
-      isImplemented = not ((not isApp) && goaltype == Auth)
-   in if not isCompliant
-        then error ("Protocol is not compliant with " ++ protocolType ++ " protocol: Protocol has " ++ show numActions ++ " actions, expected " ++ show expectedNumActions)
-        else
-          not isImplemented && error "Chauth has not been proven or implemented yet!"
+      goaltypececk = getGoalType goals /= Conf -- Will throw error in getGoalType if it's not Auth or Secc, but is used below to avoid it being overlook by haskell lazy evaluation
+   in (not isCompliant && goaltypececk && error ("Protocol is not compliant with " ++ protocolType ++ " protocol: Protocol has " ++ show numActions ++ " actions, expected " ++ show expectedNumActions))

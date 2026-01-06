@@ -261,7 +261,15 @@ vertaddInit isappprot goaltype maxDep pts =
         | goaltype == Auth = "authCh"
         | otherwise = error "This cannot happen!"
 
-      addedtypes = if isappprot then vertprintTypes [(Function, ["sent", setName])] else vertprintTypes [(Set, ["opened", "closed"])] ++ vertprintTypes [(Function, [setName])]
+      addedtypes =
+        if isappprot
+          then vertprintTypes [(Function, ["sent", setName])]
+          else
+            ( if goaltype == Secc
+                then vertprintTypes [(Set, ["opened", "closed"])]
+                else vertprintTypes [(Set, ["opened"])]
+            )
+              ++ vertprintTypes [(Function, [setName])]
       addedcounter = createGlobalCounter maxDep "counter"
       addeddummy = "state_dummy(dummy,1,0).\n"
    in pts
@@ -344,15 +352,15 @@ vertruleListIF (init, rules, goals) sqns if2cif isappprot goaltype =
             nr1 = ppRuleIFHack x sqns
             -- IF2CIF
             nr2 = if if2cif then ppRuleIF2CIF nr1 else nr1
-            nextnrnm 0 "a" = if isappprot then (1, "b") else (1, "a")
-            nextnrnm nr nm = if isappprot then ((nr + 1), "") else if nm == "a" then (nr, "b") else ((nr + 1), "a")
+            nextnrnm 0 "a" = if isappprot then (1, "b") else if goaltype == Secc then (1, "a") else (2, "auth")
+            nextnrnm nr nm = if isappprot then ((nr + 1), "") else if (not isappprot && goaltype == Auth) then ((nr + 1), "auth") else if nm == "a" then (nr, "b") else ((nr + 1), "a")
             appliednr2 = vertppRule IF nr2
             stepname = if isappprot then if n == 0 || n == 1 then "i" else "app" else "ch"
             rulenr = if isappprot then if n == 0 || n == 1 then n + 5 else n + 1 else if n == 0 then -1 else if n == 1 then lastrulenr else n + 1
             authaddendum = if goaltype == Auth && stepname == "i" && rulenr == 5 then "3" else ""
             namenr = if rulenr == -1 then "chnew" else if isappprot then stepname ++ authaddendum ++ (show rulenr) else stepname ++ (show rulenr) ++ (name)
             stepandnamenr = "step " ++ namenr
-            iknowspart = if (isappprot && n /= 0) || rulenr == -1 then ".\niknows(" ++ namenr ++ ")\n\n" else "\n\n"
+            iknowspart = if (isappprot && n /= 0) || (rulenr == -1 && goaltype == Secc) then ".\niknows(" ++ namenr ++ ")\n\n" else "\n\n"
          in stepandnamenr ++ ":=\n" ++ appliednr2 ++ iknowspart ++ (ruleIF xs (nextnrnm n name) lastrulenr)
    in init ++ (ruleIF (ruleSplit rules isappprot goaltype) (0, "a") (getlastrulenr rules)) ++ "\n" ++ goals
 
@@ -428,7 +436,7 @@ ruleSplit rules False goaltype =
       iknowspart = lastelem l'
       l3 = replacetemp l' chopenedpart
       l4 = replacetemp l' chclosedpart
-      r'' = (append iknowspart r')
+      r'' = append iknowspart r'
       r3 = replacetemp r'' chopenedpart
       r4 = replacetemp r'' chclosedpart
       ch4a = (l3, eq', equid', r3)
@@ -444,7 +452,11 @@ ruleSplit rules False goaltype =
       chnew = ([dummy_state, firstfact], [], [payloadident], [dummy_state, secondfact, closedpart])
       ch5a = ([dummy_state, firstfact, openedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
       ch5b = ([dummy_state, firstfact, closedpart], [], [], [dummy_state, secondfact, openedpart, iknowspayload])
-   in [chnew, ch5a, ch5b, ch3a, ch3b, ch4a, ch4b]
+
+      chauthnew = ([dummy_state, firstfact], [], [payloadident], [dummy_state, secondfact, openedpart, iknowspayload])
+      chauth3 = ch3a
+      chauth4 = (l3, eq', equid', replacetemp r' chopenedpart)
+   in if goaltype == Secc then [chnew, ch5a, ch5b, ch3a, ch3b, ch4a, ch4b] else [chauthnew, chauth3, chauth4]
 ruleSplit rules True goaltype =
   -- app
   let app3 = head rules
@@ -545,7 +557,7 @@ vertmakegoals False goaltype pts =
               f -> trueoutput ++ "    " ++ vertppFactListBetter IF [fact]
 
       attacknr = getlastrulenr (rules pts) + 2
-      chgoal1 = "  attack_state ch" ++ (show attacknr) ++ "a:=\n" ++ foldl applynot "" (head chgoalnoglobalcounter) ++ "\n\n"
+      chgoal1 = "  attack_state ch" ++ (show attacknr) ++ (if goaltype == Secc then "a:=\n" else "auth:=\n") ++ foldl applynot "" (head chgoalnoglobalcounter) ++ "\n\n"
       chgoal2 = "  attack_state ch" ++ (show attacknr) ++ "b:=\n" ++ foldl applynot "" (head (tail chgoalnoglobalcounter)) ++ "\n\n"
 
       sndfacttogoalbody facts =
@@ -558,7 +570,8 @@ vertmakegoals False goaltype pts =
          in "    " ++ vertppFactListBetter IF [sndfact] ++ " &\n    iknows(" ++ payloadident ++ ")"
 
       chgoal3 = "  attack_state closed_leak:=\n" ++ sndfacttogoalbody (head (tail chgoalnoglobalcounter))
-   in pts {goals = "section attack_states:\n" ++ chgoal1 ++ chgoal2 ++ chgoal3}
+      output = if goaltype == Secc then "section attack_states:\n" ++ chgoal1 ++ chgoal2 ++ chgoal3 else "section attack_states:\n" ++ chgoal1
+   in pts {goals = output}
 vertmakegoals True goaltype pts =
   -- app
   let (l, eq, eqid, r) = head (rules pts)
