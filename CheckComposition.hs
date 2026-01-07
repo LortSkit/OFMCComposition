@@ -11,23 +11,46 @@ import EnsuranceTools
 import Lexer
 import Msg
 
-data ComposableResult = Composable | Uncomposable
-  deriving (Eq, Show)
+-- | AppIncompatible
+data ComposableResult = Composable | TypeflawSucceptible | AbstractChIncompatible | InvalidPayloadAsKeyUsage
+  deriving
+    ( Eq,
+      Show
+    )
 
-trycompose :: Protocol -> Protocol -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String])
+trycompose :: Protocol -> Protocol -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String])
+-- trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args | trace ("stuff1: " ++ show (getBasePubSec typdec1 knowledge1) ++ "\nstuff2: " ++ show (getBasePubSec typdec2 knowledge2)) False = undefined
 trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args =
-  let noErrors = not (allErrors protocol1 protocol2)
-      stuff1 = getBasePubSec typdec1 knowledge1
+  let stuff1 = getBasePubSec typdec1 knowledge1
       stuff2 = getBasePubSec typdec2 knowledge2
       (pub, sec) = getFinalPubSec stuff1 stuff2 (actions1, actions2)
-      (typeflawresresult, compterms, compsetops, faults) = typeflawresistancecheck (actions1, actions2) (goals1, goals2) (typdec1, typdec2)
-      msgtupletostring (x, y) = "(" ++ getStringFromMsg x ++ "," ++ getStringFromMsg y ++ ")"
+      (chmsg3, compterms, compsetops, (gsmpappterms, gsmpappsetops), (gsmpabstractchterms, gsmpabstractchsetops)) = getProtocolTermsSetops (actions1, actions2) (goals1, goals2) (typdec1, typdec2)
+      (typeflawresresult, typeflawfaults) = typeflawresistancecheck (actions1, actions2) (goals1, goals2) (typdec1, typdec2) compterms
       msgtupletostringforfaults (x, y) = "{" ++ getStringFromMsg x ++ "; " ++ getStringFromMsg y ++ "}"
       finalsec = sec ++ map getStringFromMsg compterms ++ map msgtupletostring compsetops
-      finalfaults = map msgtupletostringforfaults faults
-      result = if typeflawresresult then Composable else Uncomposable
+
+      nowrongoverlap = noWrongOverlap (isAppProtocol actions1) (typdec1, typdec2)
+      noErrors = not (allErrors protocol1 protocol2) && nowrongoverlap
+
+      -- apprequirementresult = gsmpAppSubseteqSecUnionPub (gsmpappterms, gsmpappsetops) (pub, finalsec) -- since we build sec from the app messages, this cannot trigger?
+      (abstractpayloadrequirementresult, payloadfaults) = gsmpAbstractChIntersectionAppSubseteqPub (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub
+      (channelkeyrequirementresult, keyfaults) = noKeyHasAppLabel chmsg3 gsmpappterms -- I don't think this can trigger either, but leaving it in for now
+      result
+        | not typeflawresresult = TypeflawSucceptible
+        -- \| not apprequirementresult = AppIncompatible
+        | not abstractpayloadrequirementresult = AbstractChIncompatible
+        | not channelkeyrequirementresult = InvalidPayloadAsKeyUsage
+        | otherwise = Composable
+
+      finalgsmpappterms = map getStringFromMsg gsmpappterms
+
+      finalfaults
+        | not typeflawresresult = map msgtupletostringforfaults typeflawfaults
+        | not abstractpayloadrequirementresult = payloadfaults
+        | not channelkeyrequirementresult = map getStringFromMsg keyfaults
+        | otherwise = []
    in if noErrors
-        then (result, pub, finalsec, finalfaults)
+        then (result, pub, finalsec, finalfaults, finalgsmpappterms)
         else error "This is unreachable!"
 
 -------------------------------------PUB SEC STUFF-------------------------------------
@@ -48,6 +71,9 @@ getStringFromMsg msg = case msg of
   Comp Xor msgs -> "xor(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
   Comp Inv msgs -> "inv(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
   _ -> error ("Internal function 'getStringFromMsg' got an unexpected composed message! " ++ show msg)
+
+msgtupletostring :: (Msg, Msg) -> [Char]
+msgtupletostring (x, y) = "(" ++ getStringFromMsg x ++ "," ++ getStringFromMsg y ++ ")"
 
 getfuncString :: Msg -> [Msg] -> String
 getfuncString funcname msgs = getStringFromMsg funcname ++ "(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
@@ -81,7 +107,8 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
 
       getMsgSubterms :: Msg -> ([String], [String], String)
       getMsgSubterms msg =
-        let cryptScryptcase op keystring innermsg =
+        let -- cryptScryptcase op keystring innermsg | trace ("keystuff: " ++ show (getMsgSubterms innermsg) ++ "keymsg: " ++ keystring ++ show (innermsg)) False = undefined
+            cryptScryptcase op keystring innermsg =
               let invkeystring = "inv(" ++ keystring ++ ")"
                   (currpub, currsec, lastadded) = getMsgSubterms innermsg
                   opname =
@@ -124,16 +151,17 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
                          in cryptScryptcase op keystring innermsg
                       Comp Apply (keyname : keyinputs) ->
                         let keystring = getfuncString keyname keyinputs
-                         in cryptScryptcase op keystring innermsg
+                         in cryptScryptcase op keystring (Comp Cat (innermsg : keyinputs))
                       Comp Inv [Comp Apply (keyname : keyinputs)] ->
                         let keystring = getfuncString keyname keyinputs
-                         in cryptScryptcase op keystring innermsg
+                         in cryptScryptcase op keystring (Comp Cat (innermsg : keyinputs))
               _ -> error ("Internal function 'getMsgSubterms' got an unexpected composed message! " ++ show msg)
 
       actionToMsg :: Action -> Msg
       actionToMsg (((sender, _, _), _, (receiver, _, _)), msg, _, _) = msg
 
       getActionsSubterms :: Actions -> ([String], [String], String)
+      -- getActionsSubterms actions | trace ("msgs: " ++ show (map actionToMsg actions) ++ "\npubseclist: " ++ show (map getMsgSubterms (map actionToMsg actions))) False = undefined
       getActionsSubterms [] = ([], [], "")
       getActionsSubterms actions =
         let msgs = map actionToMsg actions
@@ -142,7 +170,7 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
          in (pub, sec, "")
       (opub1, osec1, _) = getActionsSubterms actions1
       (opub2, osec2, _) = getActionsSubterms actions2
-   in (removeDuplicates opub1 ++ removeDuplicates opub2, removeDuplicates osec1 ++ removeDuplicates osec2)
+   in (removeDuplicates (opub1 ++ opub2), removeDuplicates (osec1 ++ osec2))
 
 getBasePubSec :: Types -> Knowledge -> ([String], [String], ([String], [String]))
 getBasePubSec types knowledge =
@@ -223,29 +251,35 @@ getABFromActions
     | otherwise = (Atom a, Atom b)
 getABFromActions _ = error "Ch protocol has an incorrect number of actions! Exactly one action is required in the Ch protocol!"
 
-listOverlap :: (Eq a) => [a] -> [a] -> Bool
-listOverlap [] _ = False
-listOverlap (id : restids) addedIdents = (id `elem` addedIdents) || listOverlap restids addedIdents
+haslistOverlapTypeMismatchElem :: [(Ident, Type)] -> (Ident, Type) -> Bool
+haslistOverlapTypeMismatchElem addedIdents (id, typ) =
+  let justIdents = map fst addedIdents
+   in id `elem` justIdents && not ((id, typ) `elem` addedIdents)
 
--- TODO: Better handeling of overlap? Example, if A is agent in both, then that's probably fine?
-getIdTypeList :: Bool -> (Types, Types) -> [Ident] -> [(Ident, Type)]
+haslistOverlapTypeMismatch :: [Ident] -> Type -> [(Ident, Type)] -> Bool
+haslistOverlapTypeMismatch ids typ addedIdents =
+  let idtyplist = map (\id -> (id, typ)) ids
+      faults = filter (haslistOverlapTypeMismatchElem addedIdents) idtyplist
+   in length faults > 0
+
+getIdTypeList :: Bool -> (Types, Types) -> [(Ident, Type)] -> [(Ident, Type)]
 getIdTypeList firstIsApp ([], []) addedIdents = []
 getIdTypeList firstIsApp ([], (typ, ids) : resttypes) addedIdents
-  | listOverlap ids addedIdents = error "App protocol and Ch protocol share variable names! Please make sure there is no overlap!"
-  | not firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ ids)
-  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ ids)
+  | haslistOverlapTypeMismatch ids typ addedIdents = error "App protocol and Ch protocol share variable names that have a mismatch in type!"
+  | not firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ (map (\id -> (id, typ)) ids))
+  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ (map (\id -> (id, typ)) ids))
 getIdTypeList firstIsApp ((typ, ids) : resttypes, types2) addedIdents
-  | listOverlap ids addedIdents = error "App protocol and Ch protocol share variable names! Please make sure there is no overlap!"
-  | firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ ids)
-  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ ids)
+  | haslistOverlapTypeMismatch ids typ addedIdents = error "App protocol and Ch protocol share variable names that have a mismatch in type!"
+  | firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ (map (\id -> (id, typ)) ids))
+  | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ (map (\id -> (id, typ)) ids))
 
 tryEasyLookup :: Bool -> (Types, Types) -> Ident -> Maybe Type
 tryEasyLookup firstIsApp (types1, types2) id =
   let idTypeList = getIdTypeList firstIsApp (types1, types2) []
-      tryLookup :: [(Ident, Type)] -> Ident -> Maybe Type
-      tryLookup [] id = Nothing
-      tryLookup ((mid, typ) : rest) id = if id == mid then Just typ else tryLookup rest id
-   in if id == "i" then Just (Agent False False) else tryLookup idTypeList id
+      tryLookup :: [(Ident, Type)] -> Ident -> Maybe Type -> Maybe Type
+      tryLookup [] _ result = result
+      tryLookup ((mid, typ) : rest) id result = if id == mid then tryLookup rest id (Just typ) else tryLookup rest id result -- trying to make sure no lazy eval
+   in if id == "i" then Just (Agent False False) else tryLookup idTypeList id Nothing
 
 matchableOperators :: Operator -> Operator -> Bool
 matchableOperators op1 op2 =
@@ -284,8 +318,8 @@ unrollCat msg =
 hasUndesirableMsgStructure :: Msg -> Bool
 hasUndesirableMsgStructure msg = isCat msg || isAtom msg
 
-getsubtermsofmsg :: Msg -> [Msg]
-getsubtermsofmsg msg =
+getsubtermsofmsg :: (Msg -> Bool) -> Msg -> [Msg]
+getsubtermsofmsg hasUndesireable msg =
   let cryptScryptcase msg msgs = case msgs of
         [key, encrypted] -> case key of
           Comp Inv _ ->
@@ -294,31 +328,31 @@ getsubtermsofmsg msg =
               else
                 if isAtom key
                   then
-                    if hasUndesirableMsgStructure encrypted
-                      then msg : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                      else msg : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                    if hasUndesireable encrypted
+                      then msg : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
+                      else msg : encrypted : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
                   else
-                    if hasUndesirableMsgStructure encrypted
-                      then msg : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                      else msg : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                    if hasUndesireable encrypted
+                      then msg : key : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
+                      else msg : key : encrypted : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
           _ ->
             if isCat key
               then error "Unexpected key structure!"
               else
                 if isAtom key
                   then
-                    if hasUndesirableMsgStructure encrypted
-                      then msg : Comp Inv [key] : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                      else msg : Comp Inv [key] : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                    if hasUndesireable encrypted
+                      then msg : Comp Inv [key] : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
+                      else msg : Comp Inv [key] : encrypted : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
                   else
-                    if hasUndesirableMsgStructure encrypted
-                      then msg : Comp Inv [key] : key : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
-                      else msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg key ++ getsubtermsofmsg encrypted
+                    if hasUndesireable encrypted
+                      then msg : Comp Inv [key] : key : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
+                      else msg : Comp Inv [key] : key : encrypted : getsubtermsofmsg hasUndesireable key ++ getsubtermsofmsg hasUndesireable encrypted
         _ -> error "Unexpected structure encountered!"
       invExpXorcase op msgs =
         if length msgs /= 1
           then error ("Unexpected " ++ show op ++ "structure encountered!")
-          else getsubtermsofmsg (head msgs)
+          else getsubtermsofmsg hasUndesireable (head msgs)
    in case msg of
         Atom _ -> []
         Comp op msgs ->
@@ -328,28 +362,28 @@ getsubtermsofmsg msg =
             Cat -> case msgs of
               [Comp Cat _, _] -> error "Unexpected concatenation structure encountered!"
               [elem, Comp Cat nextmsgs] ->
-                if hasUndesirableMsgStructure elem
-                  then getsubtermsofmsg elem ++ getsubtermsofmsg (Comp Cat nextmsgs)
-                  else elem : getsubtermsofmsg elem ++ getsubtermsofmsg (Comp Cat nextmsgs)
+                if hasUndesireable elem
+                  then getsubtermsofmsg hasUndesireable elem ++ getsubtermsofmsg hasUndesireable (Comp Cat nextmsgs)
+                  else elem : getsubtermsofmsg hasUndesireable elem ++ getsubtermsofmsg hasUndesireable (Comp Cat nextmsgs)
               [elem1, elem2] ->
-                if hasUndesirableMsgStructure elem1 && hasUndesirableMsgStructure elem2
-                  then getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+                if hasUndesireable elem1 && hasUndesireable elem2
+                  then getsubtermsofmsg hasUndesireable elem1 ++ getsubtermsofmsg hasUndesireable elem2
                   else
-                    if hasUndesirableMsgStructure elem1
-                      then elem2 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+                    if hasUndesireable elem1
+                      then elem2 : getsubtermsofmsg hasUndesireable elem1 ++ getsubtermsofmsg hasUndesireable elem2
                       else
-                        if hasUndesirableMsgStructure elem2
-                          then elem1 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
-                          else elem1 : elem2 : getsubtermsofmsg elem1 ++ getsubtermsofmsg elem2
+                        if hasUndesireable elem2
+                          then elem1 : getsubtermsofmsg hasUndesireable elem1 ++ getsubtermsofmsg hasUndesireable elem2
+                          else elem1 : elem2 : getsubtermsofmsg hasUndesireable elem1 ++ getsubtermsofmsg hasUndesireable elem2
               l ->
                 if length l >= 3 && noCats l
-                  then filter (not . hasUndesirableMsgStructure) l ++ concat (map getsubtermsofmsg l)
+                  then filter (not . hasUndesireable) l ++ concat (map (getsubtermsofmsg hasUndesireable) l)
                   else error ("Expected concatenation, instead got " ++ show msg)
             op | op `elem` [Inv, Exp, Xor] -> invExpXorcase op msgs
             Apply ->
               if length msgs /= 2
                 then error "Unexpected function structure encountered!"
-                else getsubtermsofmsg (head (tail msgs))
+                else getsubtermsofmsg hasUndesireable (head (tail msgs))
             Userdef func1 -> error "I have no idea how this error was triggered..."
             _ -> error "Unreachable!" -- Pseudonym, AuthChan, ConfChan, Neq
 
@@ -402,22 +436,44 @@ tryunify firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 =
                 Userdef func1 -> error "I have no idea how this error was triggered..."
                 _ -> error "Unreachable!" -- Pseudonym, AuthChan, ConfChan, Neq
 
-typeflawresistancecheck :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> (Bool, [Msg], [(Msg, Msg)], [(Msg, Msg)])
--- typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) | trace ("whatishappening: " ++ show (isAppProtocol actions1) ++ " " ++ show (if isAppProtocol actions1 then types1 else types2)) False = undefined
-typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
+getmessages :: Bool -> (Actions, Actions) -> (Msg, Msg, Msg)
+getmessages firstIsApp (actions1, actions2) =
+  let appmsg1 = getMsgFromAction (if firstIsApp then head actions1 else head actions2)
+      appmsg2 = getMsgFromAction (if firstIsApp then head (tail actions1) else head (tail actions2))
+      chmsg3 = getMsgFromAction (if firstIsApp then head actions2 else head actions1)
+   in (appmsg1, appmsg2, chmsg3)
+
+getMsgAndSubtermsNotAtoms :: Msg -> [Msg]
+getMsgAndSubtermsNotAtoms msg =
+  if hasUndesirableMsgStructure msg
+    then removeDuplicates (getsubtermsofmsg hasUndesirableMsgStructure msg)
+    else removeDuplicates (msg : getsubtermsofmsg hasUndesirableMsgStructure msg)
+
+getMsgAndSubtermsWithAtoms :: Msg -> [Msg]
+getMsgAndSubtermsWithAtoms msg =
+  if isCat msg
+    then removeDuplicates (getsubtermsofmsg isCat msg)
+    else removeDuplicates (msg : getsubtermsofmsg isCat msg)
+
+getProtocolTermsSetops :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> (Msg, [Msg], [(Msg, Msg)], ([Msg], [(Msg, Msg)]), ([Msg], [(Msg, Msg)]))
+getProtocolTermsSetops (actions1, actions2) (goals1, goals2) (types1, types2) =
   let firstIsApp = isAppProtocol actions1
       chgoaltype = if firstIsApp then getGoalType goals2 else getGoalType goals1
       -----------------------------DEFINED IN ANB------------------------------
       appprotN = getNFromTypes (if firstIsApp then types1 else types2)
       (appprotC, appprotS) = getCSFromActions (if firstIsApp then actions1 else actions2)
-      appmsg1 = getMsgFromAction (if firstIsApp then head actions1 else head actions2)
-      appmsg2 = getMsgFromAction (if firstIsApp then head (tail actions1) else head (tail actions2))
       chprotX = getXFromTypes (if firstIsApp then types2 else types1)
       (chprotA, chprotB) = getABFromActions (if firstIsApp then actions2 else actions1)
-      chmsg3 = getMsgFromAction (if firstIsApp then head actions2 else head actions1)
       chprotSet = if chgoaltype == Secc then Atom "secCh" else Atom "authCh"
+      (appmsg1, appmsg2, chmsg3) = getmessages firstIsApp (actions1, actions2)
       --------------------------FROM FORMAL PROTOCOLS--------------------------
+      appproti = Atom "i"
+      applyoutbox agent1 agent2 = Comp Apply [Atom "outbox", Comp Cat [agent1, agent2]]
+      applyinbox agent1 agent2 = Comp Apply [Atom "inbox", Comp Cat [agent1, agent2]]
+      applysent agent1 agent2 = Comp Apply [Atom "sent", Comp Cat [agent1, agent2]]
+      applychprotSet agent1 agent2 = Comp Apply [chprotSet, Comp Cat [agent1, agent2]]
       compterms =
+        -- SMP(App)\V U SMP(Ch)\V
         [ -- appprotN, -- N
           -- appprotS, -- S
           -- appprotC, -- C
@@ -436,6 +492,7 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
           applyinbox chprotA chprotB -- inbox(A,B)
         ]
       compsetops =
+        -- setops(App) U setops(Ch)
         [ (appprotN, applysent appprotS appprotC), -- N->sent(S,C) && N<-sent(S,C)
           (appmsg1, applyoutbox appprotS appprotC), -- [m1]->outbox(S,C)
           (appmsg1, applyinbox appprotS appprotC), -- [m1]<-inbox(S,C)
@@ -444,21 +501,57 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
           (appmsg2, applyinbox appproti appprotS), -- [m2]<-inbox(i,S)
           (appprotN, applysent appprotS appproti), -- N \in sent(S,i)
           (chprotX, applyoutbox chprotA chprotB), -- X<-outbox(A,B)
-          (chprotX, applychprotSet chprotA chprotB), -- wsw X->secCh(A,B) && X \in secCh(A,B) && X \notin secCh(A,B) [OR authCh -||-]
+          (chprotX, applychprotSet chprotA chprotB), -- X->secCh(A,B) && X \in secCh(A,B) && X \notin secCh(A,B) [OR authCh -||-]
           (chprotX, applyinbox chprotA chprotB) -- x->inbox(A,B)
         ]
-      appproti = Atom "i"
-      applyoutbox agent1 agent2 = Comp Apply [Atom "outbox", Comp Cat [agent1, agent2]]
-      applyinbox agent1 agent2 = Comp Apply [Atom "inbox", Comp Cat [agent1, agent2]]
-      applysent agent1 agent2 = Comp Apply [Atom "sent", Comp Cat [agent1, agent2]]
-      applychprotSet agent1 agent2 = Comp Apply [chprotSet, Comp Cat [agent1, agent2]]
-      getMsgAndSubterms msg =
-        if hasUndesirableMsgStructure msg
-          then removeDuplicates (getsubtermsofmsg msg)
-          else msg : removeDuplicates (getsubtermsofmsg msg)
-      appmsg1AndSubterms = getMsgAndSubterms appmsg1
-      appmsg2AndSubterms = getMsgAndSubterms appmsg2
-      chmsg3AndSubterms = getMsgAndSubterms chmsg3
+      gsmpappterms =
+        removeDuplicates
+          ( [ appprotN, -- N
+              appprotS, -- S
+              appprotC, -- C
+              applysent appprotS appprotC, -- sent(S,C)
+              applyoutbox appprotS appprotC, -- outbox(S,C)
+              applyinbox appprotS appprotC, -- inbox(S,C)
+              applyoutbox appprotC appprotS, -- outbox(C,S)
+              applyinbox appprotC appprotS, -- inbox(C,S)
+              applyinbox appproti appprotS, -- inbox(i,S)
+              applysent appprotS appproti -- sent(S,i)
+            ]
+              ++ (getMsgAndSubtermsWithAtoms appmsg1 ++ getMsgAndSubtermsWithAtoms appmsg2)
+          )
+      gsmpappsetops =
+        [ (appprotN, applysent appprotS appprotC), -- N->sent(S,C) && N<-sent(S,C)
+          (appmsg1, applyoutbox appprotS appprotC), -- [m1]->outbox(S,C)
+          (appmsg1, applyinbox appprotS appprotC), -- [m1]<-inbox(S,C)
+          (appmsg2, applyoutbox appprotC appprotS), -- [m2]->outbox(C,S)
+          (appmsg2, applyinbox appprotC appprotS), -- [m2]<-inbox(C,S)
+          (appmsg2, applyinbox appproti appprotS), -- [m2]<-inbox(i,S)
+          (appprotN, applysent appprotS appproti) -- N \in sent(S,i)
+        ]
+      gsmpabstractchterms =
+        removeDuplicates
+          ( [ Atom "TEMP", -- This is abstract payload G of type \mathfrak{a}. Cannot coincide with anything anyway (therefore using protected keyword "TEMP"), since they are by definition disjoint with both App and Ch.
+              Atom "opened", -- opened
+              Atom "closed", -- closed
+              applychprotSet chprotA chprotB -- secCh(A,B)
+            ]
+              ++ (getMsgAndSubtermsWithAtoms chmsg3)
+          )
+      gsmpabstractchsetops =
+        [ (Atom "TEMP", applychprotSet chprotA chprotB), -- G->secCh(A,B) && G \in secCh(A,B) && G \notin secCh(A,B) [OR authCh -||-]
+          (Atom "TEMP", Atom "opened"), -- G->opened && G \in opened
+          (Atom "TEMP", Atom "closed") -- G->closed && G<-closed && G \in closed
+        ]
+   in (chmsg3, compterms, compsetops, (gsmpappterms, gsmpappsetops), (gsmpabstractchterms, gsmpabstractchsetops))
+
+typeflawresistancecheck :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> [Msg] -> (Bool, [(Msg, Msg)])
+-- typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) | trace ("whatishappening: " ++ show (isAppProtocol actions1) ++ " " ++ show (if isAppProtocol actions1 then types1 else types2)) False = undefined
+typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) compterms =
+  let firstIsApp = isAppProtocol actions1
+      (appmsg1, appmsg2, chmsg3) = getmessages firstIsApp (actions1, actions2)
+      appmsg1AndSubterms = getMsgAndSubtermsNotAtoms appmsg1
+      appmsg2AndSubterms = getMsgAndSubtermsNotAtoms appmsg2
+      chmsg3AndSubterms = getMsgAndSubtermsNotAtoms chmsg3
       allMsgs = removeDuplicates (appmsg1AndSubterms ++ appmsg2AndSubterms ++ chmsg3AndSubterms) -- trace ("Seriously ??? chmsg3: " ++ show chmsg3AndSubterms)
       assemblyLine :: [Msg] -> [Msg] -> [(Maybe Bool, Msg, Msg)]
       assemblyLine [] [] = []
@@ -469,7 +562,55 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) =
       -- result = foldl (\b (mbool, _, _) -> if mbool /= Just False && b /= False then b else False) True tobechecked -- trace ("Seriously ??? " ++ show tobechecked)
       faults = map (\(_, x, y) -> (x, y)) (filter (\(mbool, _, _) -> mbool == Just False) tobechecked)
       result = length faults == 0
-   in (result, compterms, compsetops, faults)
+   in (result, faults)
+
+-------------------------------------BELOW IS FOR CONDITION 2, 3, AND 4 FOR VERITCAL COMPOSABILITY-------------------------------------
+
+subseteq :: (Eq a) => [a] -> [a] -> Bool
+subseteq _ [] = error "Error in internal function 'subseteq': Cannot take subseteq of empty list!"
+subseteq [] _ = True
+subseteq (e : rest) list2 = if notElem e list2 then False else subseteq rest list2
+
+intersetion :: (Eq a) => [a] -> [a] -> [a]
+intersetion _ [] = []
+intersetion [] _ = []
+intersetion (e : rest) list2 = if e `elem` list2 then e : intersetion rest list2 else intersetion rest list2
+
+haslistOverlap :: (Eq a) => [a] -> [a] -> Bool
+haslistOverlap [] _ = False
+haslistOverlap (id : restids) addedIdents = (id `elem` addedIdents) || haslistOverlap restids addedIdents
+
+gsmpAppSubseteqSecUnionPub :: ([Msg], [(Msg, Msg)]) -> ([String], [String]) -> Bool
+gsmpAppSubseteqSecUnionPub (gsmpappterms, gsmpappsetops) (pub, sec) =
+  let gsmpappstringlist = map getStringFromMsg gsmpappterms ++ map msgtupletostring gsmpappsetops
+      pubsec = pub ++ sec
+   in subseteq gsmpappstringlist pubsec
+
+gsmpAbstractChIntersectionAppSubseteqPub :: ([Msg], [(Msg, Msg)]) -> ([Msg], [(Msg, Msg)]) -> [String] -> (Bool, [String])
+-- gsmpAbstractChIntersectionAppSubseteqPub (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub | trace ("app: " ++ show (map getStringFromMsg gsmpappterms ++ map msgtupletostring gsmpappsetops) ++ "\nch#: " ++ show (map getStringFromMsg gsmpabstractchterms ++ map msgtupletostring gsmpabstractchsetops)) False = undefined
+gsmpAbstractChIntersectionAppSubseteqPub (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub =
+  let gsmpappstringlist = map getStringFromMsg gsmpappterms ++ map msgtupletostring gsmpappsetops
+      gsmpabstractchlist = map getStringFromMsg gsmpabstractchterms ++ map msgtupletostring gsmpabstractchsetops
+      intersectionofgsmps = intersetion gsmpappstringlist gsmpabstractchlist
+      faults = filter (\x -> x `notElem` pub) intersectionofgsmps
+   in (subseteq intersectionofgsmps pub, faults)
+
+getKeysAndSubterms :: Msg -> [Msg]
+getKeysAndSubterms msg =
+  case msg of
+    Atom _ -> []
+    Comp op msgs -> case op of
+      Scrypt -> getMsgAndSubtermsWithAtoms (head msgs)
+      Crypt -> getMsgAndSubtermsWithAtoms (head msgs)
+      _ -> []
+
+noKeyHasAppLabel :: Msg -> [Msg] -> (Bool, [Msg])
+-- noKeyHasAppLabel chmsg3 gsmpappterms | trace ("app: " ++ show (gsmpappterms) ++ "\nch: " ++ show (concat (map getKeysAndSubterms (getMsgAndSubtermsWithAtoms chmsg3)))) False = undefined
+noKeyHasAppLabel chmsg3 gsmpappterms =
+  let termsandsubterms = getMsgAndSubtermsWithAtoms chmsg3
+      keyandsubterms = concat (map getKeysAndSubterms termsandsubterms)
+      faults = filter (\x -> x `elem` gsmpappterms) keyandsubterms
+   in (not (haslistOverlap keyandsubterms gsmpappterms), faults)
 
 -------------------------------------OTHER STUFF-------------------------------------
 
@@ -492,6 +633,18 @@ allErrors protocol1@(_, _, _, _, actions1, goals1) protocol2@(_, _, _, _, action
                 then error ("The two input protocols do not agree on their goals! OFMC input has goaltype " ++ show goalType1 ++ " and --comp input has goaltype " ++ show goalType2)
                 else False
 
-newcheckcompositionmain :: String -> String -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String])
+getaroundLazyEval :: [(Ident, Type)] -> Bool
+getaroundLazyEval idTypeList =
+  let checkEveryElem :: (Eq a) => [a] -> a -> Bool -> Bool
+      checkEveryElem [] _ result = result
+      checkEveryElem (e : t) checke result = if e == checke then checkEveryElem t checke False else checkEveryElem t checke result
+   in checkEveryElem idTypeList ("TEMP", Set) True
+
+noWrongOverlap :: Bool -> (Types, Types) -> Bool
+noWrongOverlap firstIsApp (types1, types2) =
+  let idTypeList = getIdTypeList firstIsApp (types1, types2) []
+   in getaroundLazyEval idTypeList
+
+newcheckcompositionmain :: String -> String -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String])
 newcheckcompositionmain filestr1 filestr2 otp =
   trycompose (anbparser (alexScanTokens filestr1)) (anbparser (alexScanTokens filestr2)) otp
