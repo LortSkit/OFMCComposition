@@ -618,11 +618,17 @@ allErrors :: Protocol -> Protocol -> Bool
 -- allErrors protocol1 protocol2 | trace ("???" ++ show (throwIfVertErrors protocol1 && throwIfVertErrors protocol2)) False = undefined
 allErrors protocol1@(_, _, _, _, actions1, goals1) protocol2@(_, _, _, _, actions2, goals2) =
   let structureErrors = (throwIfVertErrors protocol1 || throwIfVertErrors protocol2)
-      protocolTypeError = isAppProtocol actions1 == isAppProtocol actions2
-      protocolTypeStr = if isAppProtocol actions1 then "App" else "Ch"
+      firstIsApp = isAppProtocol actions1
+      protocolTypeError = firstIsApp == isAppProtocol actions2
+      protocolTypeStr = if firstIsApp then "App" else "Ch"
       goalType1 = getGoalType goals1
       goalType2 = getGoalType goals2
-      goalTypeError = goalType1 /= goalType2
+      goalTypeError
+        | goalType1 /= goalType2 =
+            if firstIsApp && goalType1 == Auth || (not firstIsApp) && goalType2 == Auth
+              then False
+              else error "The App cannot fulfill goal of Secure message arrivel when the Channel protocol send messages only authentically!"
+        | otherwise = False
    in if structureErrors
         then error "This is unreachable!"
         else
@@ -630,7 +636,7 @@ allErrors protocol1@(_, _, _, _, actions1, goals1) protocol2@(_, _, _, _, action
             then error ("The two input protocols cannot both be " ++ protocolTypeStr ++ "! Make sure you have one App and one Ch protocol!")
             else
               if goalTypeError
-                then error ("The two input protocols do not agree on their goals! OFMC input has goaltype " ++ show goalType1 ++ " and --comp input has goaltype " ++ show goalType2)
+                then error "Unreachable!"
                 else False
 
 getaroundLazyEval :: [(Ident, Type)] -> Bool

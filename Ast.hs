@@ -99,8 +99,8 @@ data ChannelType
     FreshAuthentic
   | -- | @ *->>* @ like secure, but protected against replay
     FreshSecure
-  | -- | @ -Ch-> @ a channel protocol
-    ChannelProtocol
+  | -- | @ -[ident]->, e.g., -Ch-> @ a channel protocol
+    ChannelProtocol Ident
   deriving (Eq, Show)
 
 -- | The pre-defined set of goals

@@ -35,9 +35,9 @@ vertformats pts =
       goals' = map (fGoal formats) goals
    in pts {protocol = (name, types, knowledge', abstractions', actions', goals')}
 
-vertfAct formats ((sp@(sender, False, Nothing), ChannelProtocol, rp@(receiver, False, Nothing)), m, Nothing, Nothing) =
+vertfAct formats ((sp@(sender, False, Nothing), ChannelProtocol _, rp@(receiver, False, Nothing)), m, Nothing, Nothing) =
   ((sp, Insecure, rp), fMsg formats m, Nothing, Nothing)
-vertfAct formats ((sp@(_, _, _), ChannelProtocol, _), _, _, _) = error "Unexpected channel protocol error encountered: -Ch-> cannot be used like this!"
+vertfAct formats ((sp@(_, _, _), ChannelProtocol id, _), _, _, _) = error ("Unexpected app protocol error encountered: -" ++ id ++ "-> cannot be used like this!")
 vertfAct formats struct = fAct formats struct
 
 -- fChan :: (Monad m1, Monad m2) => [Ident] -> ((a1, b1, m1 Msg), b2, (a2, b3, m2 Msg)) -> ((a1, b1, m1 Msg), b2, (a2, b3, m2 Msg))

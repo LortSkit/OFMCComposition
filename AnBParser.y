@@ -40,7 +40,7 @@ import Msg
   "->"		{ TINSECCH _}
   "*->>"        { TFAUTHCH _}
   "*->>*"       { TFSECCH _}
-  "-Ch->"       { TCHPROT _}
+  "-"       { TDASH _}
   "%"		{ TPERCENT _}
   "!="          { TUNEQUAL _}
   "!"           { TEXCLAM  _}
@@ -170,7 +170,7 @@ channeltype :: {ChannelType}
   | "*->" {Authentic}
   | "->*" {Confidential}
   | "->" {Insecure}
-  | "-Ch->" {ChannelProtocol}
+  | "-" ident "->" {ChannelProtocol $2}
 
 channeltypeG :: {ChannelType}
   : "*->*" {FreshSecure}
