@@ -194,20 +194,20 @@ showresult result printbackend =
                else ""
            )
 
-showComposableResult :: (ComposableResult, [String], [String], [String], [String]) -> String
-showComposableResult (res, pub, sec, faults, gsmpappterms) =
+showComposableResult :: (ComposableResult, [String], [String], [String], [String], [String]) -> String
+showComposableResult (res, pub, sec, faults, gsmpappterms, gsmpabstractchterms) =
   let explanation
         | res == Composable = ""
         | res == TypeflawSucceptible = "\nEXPLANATION: Inability to prove type-flaw resistance due to overlapping msg structures in the following message pairs:"
         -- \| res == AppIncompatible = ""
-        | res == AbstractChIncompatible = "\nEXPLANATION: The GSMP(Ch#) has non-public intersection with the GSMP(App). Please compare the Pub set and the overlap:"
+        | res == AbstractChIncompatible = "\nEXPLANATION: The GSMP(Ch#) has non-public intersection with the GSMP(App). \nNote: It's GSMPs, so for example 'sk(A,B)' is the same as 'sk(C,s)', since if one is in the GSMP, so is the other.\nWith that in mind, please compare the Pub set and the non-public GSMP(Ch#) and GSMP(App) overlap:"
         | res == InvalidPayloadAsKeyUsage = "\nEXPLANATION: App-labled terms found within Ch-key structure. Please compare the terms in question from the Ch protocol with the GSMP(App):"
       outputpub = if res == Composable || res == AbstractChIncompatible then "\nPub: " ++ show pub else ""
       outpubsec = if res == Composable then "\nSec: " ++ show sec else ""
       outputfaults
         | res == Composable = ""
         | res == TypeflawSucceptible = "\n" ++ show faults
-        | res == AbstractChIncompatible = "\nNon-public overlap: " ++ show faults
+        | res == AbstractChIncompatible = "\nNon-public overlap: " ++ show faults ++ "\nGSMP(Ch#): " ++ show gsmpabstractchterms ++ "\nGSMP(App): " ++ show gsmpappterms -- ++ "\nSec: " ++ show sec
         | res == InvalidPayloadAsKeyUsage = "\nTerms in question from Ch protocol: " ++ show faults ++ "\nGSMP(App): " ++ show gsmpappterms
    in "COMPOSABILITY RESULT: " ++ show res ++ explanation ++ outputpub ++ outpubsec ++ outputfaults
 

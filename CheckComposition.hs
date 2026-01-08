@@ -18,7 +18,7 @@ data ComposableResult = Composable | TypeflawSucceptible | AbstractChIncompatibl
       Show
     )
 
-trycompose :: Protocol -> Protocol -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String])
+trycompose :: Protocol -> Protocol -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String], [String])
 -- trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args | trace ("stuff1: " ++ show (getBasePubSec typdec1 knowledge1) ++ "\nstuff2: " ++ show (getBasePubSec typdec2 knowledge2)) False = undefined
 trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args =
   let stuff1 = getBasePubSec typdec1 knowledge1
@@ -33,7 +33,7 @@ trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_,
       noErrors = not (allErrors protocol1 protocol2) && nowrongoverlap
 
       -- apprequirementresult = gsmpAppSubseteqSecUnionPub (gsmpappterms, gsmpappsetops) (pub, finalsec) -- since we build sec from the app messages, this cannot trigger?
-      (abstractpayloadrequirementresult, payloadfaults) = gsmpAbstractChIntersectionAppSubseteqPub (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub
+      (abstractpayloadrequirementresult, payloadfaults) = gsmpAbstractChIntersectionAppSubseteqPub (isAppProtocol actions1) (typdec1, typdec2) (actions1, actions2) (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub
       (channelkeyrequirementresult, keyfaults) = noKeyHasAppLabel chmsg3 gsmpappterms -- I don't think this can trigger either, but leaving it in for now
       result
         | not typeflawresresult = TypeflawSucceptible
@@ -43,6 +43,7 @@ trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_,
         | otherwise = Composable
 
       finalgsmpappterms = map getStringFromMsg gsmpappterms
+      finalgsmpabstractchterms = map getStringFromMsg gsmpabstractchterms
 
       finalfaults
         | not typeflawresresult = map msgtupletostringforfaults typeflawfaults
@@ -50,7 +51,7 @@ trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_,
         | not channelkeyrequirementresult = map getStringFromMsg keyfaults
         | otherwise = []
    in if noErrors
-        then (result, pub, finalsec, finalfaults, finalgsmpappterms)
+        then (result, pub, finalsec, finalfaults, finalgsmpappterms, finalgsmpabstractchterms)
         else error "This is unreachable!"
 
 -------------------------------------PUB SEC STUFF-------------------------------------
@@ -406,19 +407,20 @@ getsubtermsofmsg hasUndesireable msg =
             Userdef func1 -> error "I have no idea how this error was triggered..."
             _ -> error "Unreachable!" -- Pseudonym, AuthChan, ConfChan, Neq
 
-tryunify :: Bool -> (Types, Types) -> (Actions, Actions) -> Msg -> Msg -> Maybe Bool
-tryunify firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 =
+tryunify :: Bool -> (Types, Types) -> (Actions, Actions) -> Bool -> Msg -> Msg -> Maybe Bool
+tryunify firstIsApp (types1, types2) (actions1, actions2) unifyPayloadAtom msg1 msg2 =
   let compAtomPaircase id msg
+        | not unifyPayloadAtom = Nothing
         | firstIsApp && tryEasyLookup firstIsApp (types1, types2) id == Just Payload && msg `elem` map getMsgFromAction actions1 = Just True
         | not firstIsApp && tryEasyLookup firstIsApp (types1, types2) id == Just Payload && msg `elem` map getMsgFromAction actions2 = Just True
         | otherwise = Nothing
       invExpXorcase msgs1 msgs2 =
         if length msgs1 /= 1 || length msgs2 /= 1
           then error ("Unhandled exception: Expected list of length 1 in internal function 'tryunify', got length " ++ show (length msgs2))
-          else tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
+          else tryunify firstIsApp (types1, types2) (actions1, actions2) unifyPayloadAtom (head msgs1) (head msgs2)
       cryptScryptcase msgs1 msgs2 =
-        let keyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head msgs1) (head msgs2)
-            bodyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head (tail msgs1)) (head (tail msgs2))
+        let keyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) unifyPayloadAtom (head msgs1) (head msgs2)
+            bodyRecursion = tryunify firstIsApp (types1, types2) (actions1, actions2) unifyPayloadAtom (head (tail msgs1)) (head (tail msgs2))
          in if isNothing keyRecursion
               then Nothing
               else
@@ -442,7 +444,7 @@ tryunify firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 =
                   let firstunroll = unrollCat msg1
                       secondunroll = unrollCat msg2
                       zipped = zip firstunroll secondunroll
-                      unifications = map (uncurry (tryunify firstIsApp (types1, types2) (actions1, actions2))) zipped
+                      unifications = map (uncurry (tryunify firstIsApp (types1, types2) (actions1, actions2) unifyPayloadAtom)) zipped
                    in if length firstunroll /= length secondunroll
                         then Just False
                         else
@@ -450,7 +452,7 @@ tryunify firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 =
                 op | op `elem` [Inv, Exp, Xor] -> invExpXorcase msgs1 msgs2
                 Apply ->
                   let b = head msgs1 /= head msgs2
-                      recursion = tryunify firstIsApp (types1, types2) (actions1, actions2) (head (tail msgs1)) (head (tail msgs2))
+                      recursion = tryunify firstIsApp (types1, types2) (actions1, actions2) unifyPayloadAtom (head (tail msgs1)) (head (tail msgs2))
                    in if b then Nothing else if recursion /= Just True then Just False else recursion
                 Userdef func1 -> error "I have no idea how this error was triggered..."
                 _ -> error "Unreachable!" -- Pseudonym, AuthChan, ConfChan, Neq
@@ -575,7 +577,7 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) c
       assemblyLine :: [Msg] -> [Msg] -> [(Maybe Bool, Msg, Msg)]
       assemblyLine [] [] = []
       assemblyLine (currChecking : rest) [] = if (length rest) == 0 then [] else assemblyLine rest (tail rest)
-      assemblyLine (currChecking : rest) (h : t) = (tryunify firstIsApp (types1, types2) (actions1, actions2) currChecking h, currChecking, h) : assemblyLine (currChecking : rest) t
+      assemblyLine (currChecking : rest) (h : t) = (tryunify firstIsApp (types1, types2) (actions1, actions2) True currChecking h, currChecking, h) : assemblyLine (currChecking : rest) t
 
       tobechecked = assemblyLine allMsgs (tail allMsgs) -- trace ("Seriously ??? Allmsgs: " ++ show allMsgs) -- ++ assemblyLine allMsgs compterms)
       -- result = foldl (\b (mbool, _, _) -> if mbool /= Just False && b /= False then b else False) True tobechecked -- trace ("Seriously ??? " ++ show tobechecked)
@@ -584,6 +586,15 @@ typeflawresistancecheck (actions1, actions2) (goals1, goals2) (types1, types2) c
    in (result, faults)
 
 -------------------------------------BELOW IS FOR CONDITION 2, 3, AND 4 FOR VERITCAL COMPOSABILITY-------------------------------------
+
+isUnifiable :: Bool -> (Types, Types) -> (Actions, Actions) -> Msg -> Msg -> Bool
+isUnifiable firstIsApp (types1, types2) (actions1, actions2) msg1 msg2 = tryunify firstIsApp (types1, types2) (actions1, actions2) False msg1 msg2 == Just True
+
+unifiableElems :: Bool -> (Types, Types) -> (Actions, Actions) -> Msg -> [Msg] -> [Msg]
+unifiableElems firstIsApp (types1, types2) (actions1, actions2) msg list = filter (isUnifiable firstIsApp (types1, types2) (actions1, actions2) msg) list
+
+hasUnifiableElem :: Bool -> (Types, Types) -> (Actions, Actions) -> Msg -> [Msg] -> Bool
+hasUnifiableElem firstIsApp (types1, types2) (actions1, actions2) msg list = length (unifiableElems firstIsApp (types1, types2) (actions1, actions2) msg list) > 0
 
 subseteq :: (Eq a) => [a] -> [a] -> Bool
 subseteq _ [] = error "Error in internal function 'subseteq': Cannot take subseteq of empty list!"
@@ -595,24 +606,28 @@ intersetion _ [] = []
 intersetion [] _ = []
 intersetion (e : rest) list2 = if e `elem` list2 then e : intersetion rest list2 else intersetion rest list2
 
+intersectionMsgLists :: Bool -> (Types, Types) -> (Actions, Actions) -> [Msg] -> [Msg] -> [Msg]
+intersectionMsgLists firstIsApp (types1, types2) (actions1, actions2) _ [] = [] -- maybe should have an error, but nah
+intersectionMsgLists firstIsApp (types1, types2) (actions1, actions2) [] _ = []
+intersectionMsgLists firstIsApp (types1, types2) (actions1, actions2) (msg : rest) msgs = removeDuplicates (unifiableElems firstIsApp (types1, types2) (actions1, actions2) msg msgs ++ intersectionMsgLists firstIsApp (types1, types2) (actions1, actions2) rest msgs)
+
 haslistOverlap :: (Eq a) => [a] -> [a] -> Bool
 haslistOverlap [] _ = False
 haslistOverlap (id : restids) addedIdents = (id `elem` addedIdents) || haslistOverlap restids addedIdents
 
-gsmpAppSubseteqSecUnionPub :: ([Msg], [(Msg, Msg)]) -> ([String], [String]) -> Bool
-gsmpAppSubseteqSecUnionPub (gsmpappterms, gsmpappsetops) (pub, sec) =
-  let gsmpappstringlist = map getStringFromMsg gsmpappterms ++ map msgtupletostring gsmpappsetops
-      pubsec = pub ++ sec
-   in subseteq gsmpappstringlist pubsec
+-- gsmpAppSubseteqSecUnionPub :: ([Msg], [(Msg, Msg)]) -> ([String], [String]) -> Bool -- unused because untriggerable
+-- gsmpAppSubseteqSecUnionPub (gsmpappterms, gsmpappsetops) (pub, sec) =
+--   let gsmpappstringlist = map getStringFromMsg gsmpappterms ++ map msgtupletostring gsmpappsetops
+--       pubsec = pub ++ sec
+--    in subseteq gsmpappstringlist pubsec
 
-gsmpAbstractChIntersectionAppSubseteqPub :: ([Msg], [(Msg, Msg)]) -> ([Msg], [(Msg, Msg)]) -> [String] -> (Bool, [String])
+gsmpAbstractChIntersectionAppSubseteqPub :: Bool -> (Types, Types) -> (Actions, Actions) -> ([Msg], [(Msg, Msg)]) -> ([Msg], [(Msg, Msg)]) -> [String] -> (Bool, [String])
 -- gsmpAbstractChIntersectionAppSubseteqPub (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub | trace ("app: " ++ show (map getStringFromMsg gsmpappterms ++ map msgtupletostring gsmpappsetops) ++ "\nch#: " ++ show (map getStringFromMsg gsmpabstractchterms ++ map msgtupletostring gsmpabstractchsetops)) False = undefined
-gsmpAbstractChIntersectionAppSubseteqPub (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub =
-  let gsmpappstringlist = map getStringFromMsg gsmpappterms ++ map msgtupletostring gsmpappsetops
-      gsmpabstractchlist = map getStringFromMsg gsmpabstractchterms ++ map msgtupletostring gsmpabstractchsetops
-      intersectionofgsmps = intersetion gsmpappstringlist gsmpabstractchlist
-      faults = filter (\x -> x `notElem` pub) intersectionofgsmps
-   in (subseteq intersectionofgsmps pub, faults)
+gsmpAbstractChIntersectionAppSubseteqPub firstIsApp (types1, types2) (actions1, actions2) (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub =
+  let msgintersection = intersectionMsgLists firstIsApp (types1, types2) (actions1, actions2) gsmpappterms gsmpabstractchterms
+      stringintersection = map getStringFromMsg msgintersection
+      faults = filter (\x -> x `notElem` pub) stringintersection
+   in (subseteq stringintersection pub, faults)
 
 getKeysAndSubterms :: Msg -> [Msg]
 getKeysAndSubterms msg =
@@ -670,6 +685,6 @@ noWrongOverlap firstIsApp (types1, types2) =
   let idTypeList = getIdTypeList firstIsApp (types1, types2) []
    in getaroundLazyEval idTypeList
 
-newcheckcompositionmain :: String -> String -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String])
+newcheckcompositionmain :: String -> String -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String], [String])
 newcheckcompositionmain filestr1 filestr2 otp =
   trycompose (anbparser (alexScanTokens filestr1)) (anbparser (alexScanTokens filestr2)) otp
