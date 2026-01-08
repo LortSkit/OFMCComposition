@@ -252,25 +252,44 @@ getABFromActions
 getABFromActions _ = error "Ch protocol has an incorrect number of actions! Exactly one action is required in the Ch protocol!"
 
 haslistOverlapTypeMismatchElem :: [(Ident, Type)] -> (Ident, Type) -> Bool
+-- haslistOverlapTypeMismatchElem addedIdents (id, typ) | trace ("Checking " ++ show (id, typ) ++ "against list " ++ show addedIdents) False = undefined
 haslistOverlapTypeMismatchElem addedIdents (id, typ) =
   let justIdents = map fst addedIdents
    in id `elem` justIdents && not ((id, typ) `elem` addedIdents)
+
+getPrintableFaultsForTypeMismatchElem :: (Ident, Type) -> [(Ident, Type)] -> [(Ident, Type)]
+getPrintableFaultsForTypeMismatchElem (id, typ) addedIdents =
+  filter (\(x, y) -> x == id) addedIdents
+
+getPrintableFaultsForTypeMismatch :: [(Ident, Type)] -> [(Ident, Type)] -> [(Ident, Type)]
+getPrintableFaultsForTypeMismatch _ [] = error "Internal function 'getPrintableFaultsForTypeMismatch' has been used incorrectly!"
+getPrintableFaultsForTypeMismatch [] _ = []
+getPrintableFaultsForTypeMismatch ((id, typ) : rest) addedIdents = getPrintableFaultsForTypeMismatchElem (id, typ) addedIdents ++ getPrintableFaultsForTypeMismatch rest addedIdents
 
 haslistOverlapTypeMismatch :: [Ident] -> Type -> [(Ident, Type)] -> Bool
 haslistOverlapTypeMismatch ids typ addedIdents =
   let idtyplist = map (\id -> (id, typ)) ids
       faults = filter (haslistOverlapTypeMismatchElem addedIdents) idtyplist
-   in length faults > 0
+      faultsnds = getPrintableFaultsForTypeMismatch faults addedIdents
+      printablefaults = zip faults faultsnds
+   in length faults > 0 && error ("App protocol and Ch protocol share variable names that have a mismatch in type: " ++ show printablefaults)
 
 getIdTypeList :: Bool -> (Types, Types) -> [(Ident, Type)] -> [(Ident, Type)]
+-- getIdTypeList firstIsApp (types1, types2) addedIdents | trace ("addedidents: " ++ show addedIdents ++ " what if " ++ show (Payload == Custom "_AppPayload")) False = undefined
 getIdTypeList firstIsApp ([], []) addedIdents = []
 getIdTypeList firstIsApp ([], (typ, ids) : resttypes) addedIdents
-  | haslistOverlapTypeMismatch ids typ addedIdents = error "App protocol and Ch protocol share variable names that have a mismatch in type!"
-  | not firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ (map (\id -> (id, typ)) ids))
+  | not firstIsApp && typ == Payload =
+      if haslistOverlapTypeMismatch ids (Custom "_AppPayload") addedIdents
+        then error "Unreachable!"
+        else map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ (map (\id -> (id, Custom "_AppPayload")) ids))
+  | haslistOverlapTypeMismatch ids typ addedIdents = error "Unreachable!"
   | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp ([], resttypes) (addedIdents ++ (map (\id -> (id, typ)) ids))
 getIdTypeList firstIsApp ((typ, ids) : resttypes, types2) addedIdents
-  | haslistOverlapTypeMismatch ids typ addedIdents = error "App protocol and Ch protocol share variable names that have a mismatch in type!"
-  | firstIsApp && typ == Payload = map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ (map (\id -> (id, typ)) ids))
+  | firstIsApp && typ == Payload =
+      if haslistOverlapTypeMismatch ids (Custom "_AppPayload") addedIdents
+        then error "Unreachable!"
+        else map (\id -> (id, Custom "_AppPayload")) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ (map (\id -> (id, Custom "_AppPayload")) ids))
+  | haslistOverlapTypeMismatch ids typ addedIdents = error "Unreachable!"
   | otherwise = map (\id -> (id, typ)) ids ++ getIdTypeList firstIsApp (resttypes, types2) (addedIdents ++ (map (\id -> (id, typ)) ids))
 
 tryEasyLookup :: Bool -> (Types, Types) -> Ident -> Maybe Type
