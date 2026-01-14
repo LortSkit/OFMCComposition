@@ -19,11 +19,11 @@ data ComposableResult = Composable | TypeflawSucceptible | AbstractChIncompatibl
 
 trycompose :: Protocol -> Protocol -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String], [String])
 -- trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args | trace ("stuff1: " ++ show (getBasePubSec typdec1 knowledge1) ++ "\nstuff2: " ++ show (getBasePubSec typdec2 knowledge2)) False = undefined
-trycompose protocol1@(_, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args =
+trycompose protocol1@(name, typdec1, knowledge1, _, actions1, goals1) protocol2@(_, typdec2, knowledge2, _, actions2, goals2) args =
   let stuff1 = getBasePubSec typdec1 knowledge1
       stuff2 = getBasePubSec typdec2 knowledge2
       (pub, sec) = getFinalPubSec stuff1 stuff2 (actions1, actions2)
-      (chmsg3, compterms, compsetops, (gsmpappterms, gsmpappsetops), (gsmpabstractchterms, gsmpabstractchsetops)) = getProtocolTermsSetops (actions1, actions2) (goals1, goals2) (typdec1, typdec2)
+      (chmsg3, compterms, compsetops, (gsmpappterms, gsmpappsetops), (gsmpabstractchterms, gsmpabstractchsetops)) = getProtocolTermsSetops name (actions1, actions2) (goals1, goals2) (typdec1, typdec2)
       (typeflawresresult, typeflawfaults) = typeflawresistancecheck (actions1, actions2) (goals1, goals2) (typdec1, typdec2) compterms
       msgtupletostringforfaults (x, y) = "{" ++ getStringFromMsg x ++ "; " ++ getStringFromMsg y ++ "}"
       finalsec = sec ++ map getStringFromMsg compterms ++ map msgtupletostring compsetops
@@ -212,9 +212,6 @@ getBasePubSec types knowledge =
 
 -------------------------------------BELOW ARE TYPE-FLAW RESISTANCE CHECKING STUFF-------------------------------------
 
-getMsgFromAction :: Action -> Msg
-getMsgFromAction (_, msg, _, _) = msg
-
 getNFromTypes :: Types -> Msg
 -- getNFromTypes ((typ, idents) : resttypes) | trace ("???" ++ show (typ, idents)) False = undefined
 getNFromTypes [] = error "App protocol has no nonces! Exactly one nonce is required in the App protocol!"
@@ -227,7 +224,7 @@ getXFromTypes :: Types -> Msg
 getXFromTypes [] = error "Ch protocol has no payloads! Exactly one payload is required in the Ch protocol!"
 getXFromTypes ((typ, idents) : resttypes) =
   case typ of
-    Payload -> if length idents /= 1 then error "Ch protocol more than one payload! Exactly one payload is required in the Ch protocol!" else Atom (head idents)
+    Payload -> if length idents /= 1 then error "Ch protocol has more than one payload! Exactly one payload is required in the Ch protocol!" else Atom (head idents)
     _ -> getXFromTypes resttypes
 
 getCSFromActions :: Actions -> (Msg, Msg)
@@ -475,10 +472,10 @@ getMsgAndSubtermsWithAtoms msg =
     then removeDuplicates (getsubtermsofmsg isCat msg)
     else removeDuplicates (msg : getsubtermsofmsg isCat msg)
 
-getProtocolTermsSetops :: (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> (Msg, [Msg], [(Msg, Msg)], ([Msg], [(Msg, Msg)]), ([Msg], [(Msg, Msg)]))
-getProtocolTermsSetops (actions1, actions2) (goals1, goals2) (types1, types2) =
+getProtocolTermsSetops :: String -> (Actions, Actions) -> (Goals, Goals) -> (Types, Types) -> (Msg, [Msg], [(Msg, Msg)], ([Msg], [(Msg, Msg)]), ([Msg], [(Msg, Msg)]))
+getProtocolTermsSetops name (actions1, actions2) (goals1, goals2) (types1, types2) =
   let firstIsApp = isAppProtocol actions1
-      chgoaltype = if firstIsApp then getGoalType goals2 else getGoalType goals1
+      (chgoaltype, _, _, _) = if firstIsApp then getGoalTypeAndPayload goals2 types2 name else getGoalTypeAndPayload goals1 types1 name
       -----------------------------DEFINED IN ANB------------------------------
       appprotN = getNFromTypes (if firstIsApp then types1 else types2)
       (appprotC, appprotS) = getCSFromActions (if firstIsApp then actions1 else actions2)
@@ -649,18 +646,18 @@ noKeyHasAppLabel chmsg3 gsmpappterms =
 
 allErrors :: Protocol -> Protocol -> Bool
 -- allErrors protocol1 protocol2 | trace ("???" ++ show (throwIfVertErrors protocol1 && throwIfVertErrors protocol2)) False = undefined
-allErrors protocol1@(_, _, _, _, actions1, goals1) protocol2@(_, _, _, _, actions2, goals2) =
+allErrors protocol1@(name1, types1, _, _, actions1, goals1) protocol2@(name2, types2, _, _, actions2, goals2) =
   let structureErrors = (throwIfVertErrors protocol1 || throwIfVertErrors protocol2)
       firstIsApp = isAppProtocol actions1
       protocolTypeError = firstIsApp == isAppProtocol actions2
       protocolTypeStr = if firstIsApp then "App" else "Ch"
-      goalType1 = getGoalType goals1
-      goalType2 = getGoalType goals2
+      (goalType1, _, _, _) = getGoalTypeAndPayload goals1 types1 name1
+      (goalType2, _, _, _) = getGoalTypeAndPayload goals2 types2 name2
       goalTypeError
         | goalType1 /= goalType2 =
             if firstIsApp && goalType1 == Auth || (not firstIsApp) && goalType2 == Auth
               then False
-              else error "The App cannot fulfill goal of Secure message arrivel when the Channel protocol send messages only authentically!"
+              else error "The App cannot fulfill goal of Secure message arrival when the Channel protocol send messages only authentically!"
         | otherwise = False
    in if structureErrors
         then error "This is unreachable!"

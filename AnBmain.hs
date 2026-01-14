@@ -26,11 +26,11 @@ import Translator
 import VertTranslator
 
 mkIF :: Protocol -> AnBOptsAndPars -> String
-mkIF (protocol@(_, typdec, knowledge, _, actions, goals)) args =
+mkIF (protocol@(name, typdec, knowledge, _, actions, goals)) args =
   ( if (vert args)
       then
         let isApp = isAppProtocol actions
-            goaltype = getGoalType goals
+            (goaltype, _, _, _) = getGoalTypeAndPayload goals typdec name
             noErrors = not (throwIfVertErrors protocol)
          in if noErrors
               then
