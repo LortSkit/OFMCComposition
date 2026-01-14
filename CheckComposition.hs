@@ -6,7 +6,6 @@ import Ast
 import Data.Char (isLower, toLower, toUpper)
 import Data.List
 import Data.Maybe (isNothing)
-import Debug.Trace
 import EnsuranceTools
 import Lexer
 import Msg
