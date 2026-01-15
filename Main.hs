@@ -38,7 +38,7 @@ import System.Exit
 import System.IO
 import TheoLoad
 
-productname = "Open-Source Fixedpoint Model-Checker version 2024\n"
+productname = "Open-Source Fixedpoint Model-Checker version 2026 (with vertical composition)\n"
 
 usage =
   "usage: ofmc [<OPTIONS>] <INPUT FILE>\n"
@@ -464,8 +464,8 @@ mainWithArgs (onp, anbonp) (brothers :: Maybe ((MVar Result, MVar Result))) iter
             else
               if compfile onp /= Nothing
                 then do
-                  filestr1 <- readFile (filename onp)
-                  filestr2 <- readFile (fromJust (compfile onp))
+                  filestr1 <- readFile (filename onp) -- should be app (will be checked)
+                  filestr2 <- readFile (fromJust (compfile onp)) -- should be ch (will be checked)
                   putStr (showComposableResult (newcheckcompositionmain filestr1 filestr2 anbonp))
                   exitWith ExitSuccess
                   return ""

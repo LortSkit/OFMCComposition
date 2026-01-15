@@ -683,4 +683,17 @@ noWrongOverlap firstIsApp (types1, types2) =
 
 newcheckcompositionmain :: String -> String -> AnBOptsAndPars -> (ComposableResult, [String], [String], [String], [String], [String])
 newcheckcompositionmain filestr1 filestr2 otp =
-  trycompose (anbparser (alexScanTokens filestr1)) (anbparser (alexScanTokens filestr2)) otp
+  let firstprot = (anbparser (alexScanTokens filestr1))
+      secondprot = (anbparser (alexScanTokens filestr2))
+      (_, _, _, _, actions1, _) = firstprot
+      (_, _, _, _, actions2, _) = secondprot
+      firstIsApp = isAppProtocol actions1
+      secondIsApp = isAppProtocol actions2
+      incorrectUsage = firstIsApp == secondIsApp
+      name = if firstIsApp then "App" else "Ch"
+      wrongOrder = not (firstIsApp && (not secondIsApp))
+      result
+        | incorrectUsage = error ("Incorrect usage of --comp flag: Expecting something like 'ofmcnew.exe .\\App.AnB --comp .\\Ch.AnB', instead found two " ++ name ++ " protocols!")
+        | wrongOrder = error ("Vertical composition is not commutative: We expect something like 'ofmcnew.exe .\\App.AnB --comp .\\Ch.AnB' to test whether App//Ch. Please reverse the order of your App and Ch files!")
+        | otherwise = trycompose firstprot secondprot otp
+   in result
