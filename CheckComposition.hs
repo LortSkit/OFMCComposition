@@ -108,14 +108,17 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
       getMsgSubterms :: Msg -> ([String], [String], String)
       getMsgSubterms msg =
         let -- cryptScryptcase op keystring innermsg | trace ("keystuff: " ++ show (getMsgSubterms innermsg) ++ "keymsg: " ++ keystring ++ show (innermsg)) False = undefined
-            cryptScryptcase op keystring innermsg =
-              let invkeystring = "inv(" ++ keystring ++ ")"
-                  (currpub, currsec, lastadded) = getMsgSubterms innermsg
+            scryptcase op keystring innermsg =
+              let (currpub, currsec, lastadded) = getMsgSubterms innermsg
                   opname =
                     let (firstchar : restofstring) = show op
                      in toLower firstchar : restofstring
                   tobeadded = opname ++ "(" ++ keystring ++ "," ++ lastadded ++ ")"
-               in (currpub, tobeadded : currsec ++ [keystring, invkeystring], tobeadded)
+               in (currpub, tobeadded : currsec ++ [keystring], tobeadded)
+            cryptcase op keystring innermsg =
+              let invkeystring = "inv(" ++ keystring ++ ")"
+                  (currpub, currsec, lastadded) = scryptcase op keystring innermsg
+               in (currpub, currsec ++ [keystring, invkeystring], lastadded)
             catExpXorcase op msgs =
               let pubseclastaddedlist = map getMsgSubterms msgs
                   (isSec, lastadded) = isAnyInSec pubseclastaddedlist
@@ -149,13 +152,13 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
                     case key of
                       Atom k ->
                         let keystring = k
-                         in cryptScryptcase op keystring innermsg
+                         in if op == Crypt then cryptcase op keystring innermsg else scryptcase op keystring innermsg
                       Comp Apply (keyname : keyinputs) ->
                         let keystring = getfuncString keyname keyinputs
-                         in cryptScryptcase op keystring (Comp Cat (innermsg : keyinputs))
+                         in if op == Crypt then cryptcase op keystring innermsg else scryptcase op keystring innermsg
                       Comp Inv [Comp Apply (keyname : keyinputs)] ->
                         let keystring = getfuncString keyname keyinputs
-                         in cryptScryptcase op keystring (Comp Cat (innermsg : keyinputs))
+                         in if op == Crypt then cryptcase op keystring innermsg else error "Using an inv(key) for symmetric encryption is beyond stupid... don't do that please :)"
               _ -> error ("Internal function 'getMsgSubterms' got an unexpected composed message! " ++ show msg)
 
       actionToMsg :: Action -> Msg
