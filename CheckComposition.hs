@@ -33,7 +33,7 @@ trycompose protocol1@(name, typdec1, knowledge1, _, actions1, goals1) protocol2@
 
       -- apprequirementresult = gsmpAppSubseteqSecUnionPub (gsmpappterms, gsmpappsetops) (pub, finalsec) -- since we build sec from the app messages, this cannot trigger?
       (abstractpayloadrequirementresult, payloadfaults) = gsmpAbstractChIntersectionAppSubseteqPub (isAppProtocol actions1) (typdec1, typdec2) (actions1, actions2) (gsmpappterms, gsmpappsetops) (gsmpabstractchterms, gsmpabstractchsetops) pub
-      (channelkeyrequirementresult, keyfaults) = noKeyHasAppLabel chmsg3 gsmpappterms -- I don't think this can trigger either, but leaving it in for now
+      (channelkeyrequirementresult, keyfaults) = noKeyHasAppLabel pub chmsg3 gsmpappterms -- I don't think this can trigger either, but leaving it in for now
       result
         | not typeflawresresult = TypeflawSucceptible
         -- \| not apprequirementresult = AppIncompatible
@@ -635,13 +635,15 @@ getKeysAndSubterms msg =
       Crypt -> getMsgAndSubtermsWithAtoms (head msgs)
       _ -> []
 
-noKeyHasAppLabel :: Msg -> [Msg] -> (Bool, [Msg])
+noKeyHasAppLabel :: [String] -> Msg -> [Msg] -> (Bool, [Msg])
 -- noKeyHasAppLabel chmsg3 gsmpappterms | trace ("app: " ++ show (gsmpappterms) ++ "\nch: " ++ show (concat (map getKeysAndSubterms (getMsgAndSubtermsWithAtoms chmsg3)))) False = undefined
-noKeyHasAppLabel chmsg3 gsmpappterms =
+noKeyHasAppLabel pub chmsg3 gsmpappterms =
   let termsandsubterms = getMsgAndSubtermsWithAtoms chmsg3
       keyandsubterms = concat (map getKeysAndSubterms termsandsubterms)
       faults = filter (\x -> x `elem` gsmpappterms) keyandsubterms
-   in (not (haslistOverlap keyandsubterms gsmpappterms), faults)
+      overlap = intersetion keyandsubterms gsmpappterms
+      appoverlap = filter (\x -> not ((getStringFromMsg x) `elem` pub)) overlap
+   in (length appoverlap == 0, faults)
 
 -------------------------------------OTHER STUFF-------------------------------------
 
