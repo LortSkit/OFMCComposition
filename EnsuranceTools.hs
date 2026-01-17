@@ -152,6 +152,10 @@ hasCorrectNonceUsage False name types actions =
         then error "Unreachable!"
         else True
 
+hasNoSetUsage :: Types -> Bool
+hasNoSetUsage [] = True
+hasNoSetUsage ((typ, _) : resttypes) = if typ == Set then error ("Please do not use the Set type! No set operations are possible anyway!") else hasNoSetUsage resttypes
+
 throwIfVertErrors :: Protocol -> Bool
 -- throwIfVertErrors protocol@(_, _, _, _, actions, goals) | trace ("isApp: " ++ show (isAppProtocol actions) ++ ", length of actions: " ++ show (length actions)) False = undefined
 throwIfVertErrors protocol@(name, types, knowledge, _, actions, goals) =
@@ -165,6 +169,9 @@ throwIfVertErrors protocol@(name, types, knowledge, _, actions, goals) =
         if not isCompliant
           then error ("Protocol is not compliant with " ++ protocolType ++ " protocol: Protocol has " ++ show numActions ++ " actions, expected " ++ show expectedNumActions)
           else False
+
+      setusagecheck = hasNoSetUsage types
+
       payloadusagecheck
         | not isCompliant = False -- Will trigger another error anyway
         | isApp =
@@ -214,4 +221,4 @@ throwIfVertErrors protocol@(name, types, knowledge, _, actions, goals) =
                         else False
             _ -> error "Unreachable!2"
       haschannelnameerrors = if isApp then hasChannelNameErrors actions name else False
-   in (not (not hascompliancyissues && not haschannelnameerrors && goaltypecheck && payloadusagecheck && actiongoalstructurecheck && correctKnowledge && correctNonceUsage) && error "Unreachable!3")
+   in (not (not hascompliancyissues && not haschannelnameerrors && goaltypecheck && setusagecheck && payloadusagecheck && actiongoalstructurecheck && correctKnowledge && correctNonceUsage) && error "Unreachable!3")
