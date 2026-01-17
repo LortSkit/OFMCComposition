@@ -192,7 +192,7 @@ getBasePubSec types knowledge =
       _getKnowledgeAtomComp [] = ([], [])
       _getKnowledgeAtomComp (msg : msgs) = case msg of
         Atom x -> concatTupleFst x (_getKnowledgeAtomComp msgs)
-        Comp Apply othermsgs ->
+        Comp _ othermsgs ->
           let recursiveBit = (_getKnowledgeAtomComp msgs)
               fstBit = getStringFromMsg (head othermsgs)
               sndBit = getStringFromMsg (head (tail othermsgs))
