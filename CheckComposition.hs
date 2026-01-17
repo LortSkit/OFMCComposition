@@ -125,8 +125,9 @@ getFinalPubSec (flattypes1, pub1, sec1) (flattypes2, pub2, sec2) (actions1, acti
                     let (firstchar : restofstring) = show op
                      in toLower firstchar : restofstring
                   funcstring = getfuncString (Atom opname) msgs
+                  addifcatsec = filter (\x -> not (x `elem` currsec) && not (x `elem` currpub)) (map getStringFromMsg msgs)
                in if opname == "cat"
-                    then (currpub, currsec, actuallastadded)
+                    then (currpub, currsec ++ addifcatsec, actuallastadded)
                     else (currpub, funcstring : currsec, funcstring)
          in case msg of
               Atom x -> if x `elem` pub1 || x `elem` pub2 then ([x], [], x) else ([], [x], x)
