@@ -55,29 +55,6 @@ trycompose protocol1@(name, typdec1, knowledge1, _, actions1, goals1) protocol2@
 
 -------------------------------------PUB SEC STUFF-------------------------------------
 
-msgStrListToCommaSepStrip :: [String] -> String
-msgStrListToCommaSepStrip [] = ""
-msgStrListToCommaSepStrip [msg] = msg
-msgStrListToCommaSepStrip (msg : msgs) = msg ++ "," ++ msgStrListToCommaSepStrip msgs
-
-getStringFromMsg :: Msg -> String
-getStringFromMsg msg = case msg of
-  Atom x -> x
-  Comp Apply msgs -> getfuncString (head msgs) (tail msgs)
-  Comp Cat msgs -> msgStrListToCommaSepStrip (map getStringFromMsg msgs)
-  Comp Crypt msgs -> "crypt(" ++ getStringFromMsg (head msgs) ++ ", " ++ msgStrListToCommaSepStrip (map getStringFromMsg (tail msgs)) ++ ")"
-  Comp Scrypt msgs -> "scrypt(" ++ getStringFromMsg (head msgs) ++ ", " ++ msgStrListToCommaSepStrip (map getStringFromMsg (tail msgs)) ++ ")"
-  Comp Exp msgs -> "exp(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
-  Comp Xor msgs -> "xor(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
-  Comp Inv msgs -> "inv(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
-  _ -> error ("Internal function 'getStringFromMsg' got an unexpected composed message! " ++ show msg)
-
-msgtupletostring :: (Msg, Msg) -> [Char]
-msgtupletostring (x, y) = "(" ++ getStringFromMsg x ++ "," ++ getStringFromMsg y ++ ")"
-
-getfuncString :: Msg -> [Msg] -> String
-getfuncString funcname msgs = getStringFromMsg funcname ++ "(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
-
 removeDuplicates [] = []
 removeDuplicates (a : as) = if a `elem` as then removeDuplicates as else a : removeDuplicates as
 

@@ -31,6 +31,56 @@ getPayloadName msg types name = case msg of
   Atom p -> if msg /= getPayloadFromTypes types name then error ("The variable '" ++ p ++ "' of goal msg in Protocol '" ++ name ++ "' is not a variable of type Payload!") else p
   Comp _ _ -> error ("Goal msg in Protocol '" ++ name ++ "' has to be a variable of type Payload!")
 
+msgStrListToCommaSepStrip :: [String] -> String
+msgStrListToCommaSepStrip [] = ""
+msgStrListToCommaSepStrip [msg] = msg
+msgStrListToCommaSepStrip (msg : msgs) = msg ++ "," ++ msgStrListToCommaSepStrip msgs
+
+msgtupletostring :: (Msg, Msg) -> [Char]
+msgtupletostring (x, y) = "(" ++ getStringFromMsg x ++ "," ++ getStringFromMsg y ++ ")"
+
+getfuncString :: Msg -> [Msg] -> String
+getfuncString funcname msgs = getStringFromMsg funcname ++ "(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
+
+getStringFromMsg :: Msg -> String
+getStringFromMsg msg = case msg of
+  Atom x -> x
+  Comp Apply msgs -> getfuncString (head msgs) (tail msgs)
+  Comp Cat msgs -> msgStrListToCommaSepStrip (map getStringFromMsg msgs)
+  Comp Crypt msgs -> "crypt(" ++ getStringFromMsg (head msgs) ++ ", " ++ msgStrListToCommaSepStrip (map getStringFromMsg (tail msgs)) ++ ")"
+  Comp Scrypt msgs -> "scrypt(" ++ getStringFromMsg (head msgs) ++ ", " ++ msgStrListToCommaSepStrip (map getStringFromMsg (tail msgs)) ++ ")"
+  Comp Exp msgs -> "exp(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
+  Comp Xor msgs -> "xor(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
+  Comp Inv msgs -> "inv(" ++ msgStrListToCommaSepStrip (map getStringFromMsg msgs) ++ ")"
+  _ -> error ("Internal function 'getStringFromMsg' got an unexpected composed message! " ++ show msg)
+
+printChannelType :: ChannelType -> String
+printChannelType channeltype = case channeltype of
+  Insecure -> "->"
+  Authentic -> "*->"
+  Confidential -> "->*"
+  Secure -> "*->*"
+  FreshAuthentic -> "*->>"
+  FreshSecure -> "*->>*"
+  ChannelProtocol ident -> "-" ++ ident ++ "->"
+
+printPeer :: Peer -> String
+printPeer p =
+  let (printp, _, _) = p
+   in printp
+
+printChannel :: Channel -> String
+printChannel channel =
+  let (p1, channeltype, p2) = channel
+   in printPeer p1 ++ printChannelType channeltype ++ printPeer p2
+
+printGoal :: Goal -> String
+printGoal goal = case goal of
+  ChGoal channel msg -> printChannel channel ++ ":" ++ getStringFromMsg msg
+  Secret msg peers _ -> getStringFromMsg msg ++ " secret between " ++ foldl (\x y -> x ++ "," ++ printPeer y) (printPeer (head peers)) (tail peers)
+  Authentication p1 p2 msg -> printPeer p1 ++ " authenticates " ++ printPeer p2 ++ " on " ++ getStringFromMsg msg
+  WAuthentication p1 p2 msg -> printPeer p1 ++ " weakly authenticates " ++ printPeer p2 ++ " on " ++ getStringFromMsg msg
+
 getGoalTypeAndPayload :: Goals -> Types -> String -> (GoalType, Peer, Peer, Msg)
 getGoalTypeAndPayload goals types name =
   let numberOfGoals = length goals
@@ -46,7 +96,7 @@ getGoalTypeAndPayload goals types name =
                   Confidential -> error "Confidential goaltype is not supported! Please use either *-> or *->*."
                 payloadName = getPayloadName msg types name
              in if length payloadName < -1 then error "Unreachable!" else (goaltype, sender, receiver, Atom payloadName)
-          x -> error ("Protocol has the wrong goaltype " ++ show x ++ "!\nExpected ((AGENT1,False,Nothing),X,(AGENT2,False,Nothing)), where X = FreshSecure, FreshAuthentic")
+          x -> error ("Protocol has the wrong goaltype '" ++ printGoal x ++ "'!\nExpected Agent1*->Agent2: Payload or using *->*!")
 
 msgUsesPayload :: Msg -> Msg -> Bool
 msgUsesPayload payload msg =
