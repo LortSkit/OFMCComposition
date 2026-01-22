@@ -533,7 +533,10 @@ getProtocolTermsSetops name (actions1, actions2) (goals1, goals2) (types1, types
               Atom "closed", -- closed
               applychprotSet chprotA chprotB -- secCh(A,B)
             ]
-              ++ (getMsgAndSubtermsWithAtoms chmsg3)
+              ++ (getMsgAndSubtermsWithAtoms chmsg3) -- This one will have ``abstract'' payload, but previous typing functions will still see the payload X as payload of type \mathfrak{p}
+              -- This is annoying, since when checking that the overlap between GSMP(Ch#) and GSMP(App) is only public, it would always find an overlap with X and either of the App msgs
+              -- This was solved by making another input to the `tryunify' function defined later, which can make it optional whether to consider Atoms and Comps unifiable whenever you have this situation
+              -- As such, when checkin for typeflaw res, it is set to true, but when checking for GSMP overlap, it is set to false.
           )
       gsmpabstractchsetops =
         [ (Atom "TEMP", applychprotSet chprotA chprotB), -- G->secCh(A,B) && G \in secCh(A,B) && G \notin secCh(A,B) [OR authCh -||-]
