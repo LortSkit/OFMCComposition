@@ -2,6 +2,7 @@
 *.hi
 *.exe
 *.txt
+*.AnB
 
 NewIfLexer.hs 
 NewIfParser.hs 

@@ -14,7 +14,7 @@ all:
 ########################
 
 ofmc:	$(SRCFILES) $(GENERATED)
-	ghc $(PACKAGESHIT) -XNoMonomorphismRestriction -XScopedTypeVariables -fspec-constr-count=5 -static -package base -threaded -rtsopts -with-rtsopts=-N --make -O2 -Wno-tabs Main.hs -o ofmcnew
+	ghc $(PACKAGESHIT) -XNoMonomorphismRestriction -XScopedTypeVariables -fspec-constr-count=5 -static -package base -threaded -rtsopts -with-rtsopts=-N --make -O2 -Wno-tabs Main.hs -o ofmcnewFIXED
 
 ########################
 
